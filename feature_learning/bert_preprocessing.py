@@ -62,7 +62,7 @@ def preprocess_strings(nlcomp_dir, batch_size, nlcomp_list=None, id_mapping=Fals
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('--nlcomp-dir', type=str, default='', help='')
+    parser.add_argument('--data-dir', type=str, default='', help='')
     parser.add_argument('--batch-size', type=int, default=5000, help='')
     parser.add_argument('--id-mapping', action="store_true", help='')
 
