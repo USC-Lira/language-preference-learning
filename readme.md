@@ -7,9 +7,11 @@
 
 ## Installation
 ```
+# create conda environment
 conda create -n lang python=3.8
 conda activate lang
 
+# install dependencies
 pip install -r requirements.txt
 ```
 
