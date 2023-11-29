@@ -8,14 +8,16 @@ from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
 import argparse
 import os
+from feature_learning.utils import timeStamped
 
-INITIAL_LOSS_SANITY_CHECK = True
 
-
-def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
-          decoder_hidden_dim=128, remove_lang_encoder_hidden=False, preprocessed_nlcomps=False, id_mapped=False):
+def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
+          decoder_hidden_dim=128, remove_lang_encoder_hidden=False, preprocessed_nlcomps=False, id_mapped=False,
+          initial_loss_check=False, freeze_bert=False):
     torch.manual_seed(seed)
     np.random.seed(seed)
+    save_dir = timeStamped(exp_name)
+    os.makedirs(save_dir, exist_ok=True)
 
     #  use gpu if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -82,13 +84,13 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
     # train_dataset, val_dataset = torch.utils.data.random_split(dataset, lengths=[0.9, 0.1], generator=generator)
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=256, shuffle=True, num_workers=4, pin_memory=True
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True
     )
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=32, shuffle=False, num_workers=4, pin_memory=True
+        val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True
     )
 
-    if INITIAL_LOSS_SANITY_CHECK:
+    if initial_loss_check:
         print("Initial loss sanity check...")
         # temp_loss = 0
         # for train_datapoint in train_loader:
@@ -302,10 +304,11 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
 
+    parser.add_argument('--exp-name', type=str, default='feature_learning', help='The name of experiment')
     parser.add_argument('--seed', type=int, default=0, help='')
     parser.add_argument('--data-dir', type=str, default='data/', help='')
     parser.add_argument('--epochs', type=int, default=100, help='')
-    parser.add_argument('--save-dir', type=str, default='', help='')
+    parser.add_argument('--batch-size', type=int, default=256, help='')
     parser.add_argument('--lr', type=float, default=1e-3, help='')
     parser.add_argument('--weight-decay', type=float, default=0, help='')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128, help='')
@@ -313,11 +316,14 @@ if __name__ == '__main__':
     parser.add_argument('--remove-lang-encoder-hidden', action="store_true", help='')
     parser.add_argument('--preprocessed-nlcomps', action="store_true", help='')
     parser.add_argument('--id-mapped', action="store_true", help='whether the data is id mapped')
+    parser.add_argument('--freeze-bert', action="store_true", help='whether to freeze BERT')
+    parser.add_argument('--initial-loss-check', action="store_true", help='whether to check initial loss')
 
     args = parser.parse_args()
 
-    trained_model = train(args.seed, args.data_dir, args.epochs, args.save_dir,
+    trained_model = train(args.exp_name, args.seed, args.data_dir, args.epochs, args.batch_size,
                           learning_rate=args.lr, weight_decay=args.weight_decay,
                           encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
                           remove_lang_encoder_hidden=args.remove_lang_encoder_hidden,
-                          preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped)
+                          preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped,
+                          freeze_bert=args.freeze_bert, initial_loss_check=args.initial_loss_check)
