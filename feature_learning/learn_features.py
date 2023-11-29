@@ -89,7 +89,7 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
     )
 
     if INITIAL_LOSS_SANITY_CHECK:
-        # print("Initial loss sanity check...")
+        print("Initial loss sanity check...")
         # temp_loss = 0
         # for train_datapoint in train_loader:
         #     with torch.no_grad():

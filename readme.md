@@ -23,5 +23,5 @@ python -m feature_learning.bert_preprocessing --id-mapping --data-dir=global_pat
 
 ## Feature Learning
 ```
-python -m feature_learning.feature_learning --data-dir=global_path_to_data_dir --id-mapped --preprocessed-nlcomps
+python -m feature_learning.learn_features --data-dir=global_path_to_data_dir --id-mapped --preprocessed-nlcomps
 ```
