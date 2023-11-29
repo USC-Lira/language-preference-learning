@@ -1,13 +1,13 @@
 import json
 import numpy as np
-from transformers import BertTokenizer, BertModel
+from transformers import AutoModel, AutoTokenizer
 import torch
 import argparse
 import os
 
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
+tokenizer = AutoTokenizer.from_pretrained('google/bert_uncased_L-4_H-256_A-4')
+model = AutoModel.from_pretrained('google/bert_uncased_L-4_H-256_A-4')
 
 
 def preprocess_strings(nlcomp_dir, batch_size, nlcomp_list=None, id_mapping=False, save=False):
@@ -67,5 +67,5 @@ if __name__ == '__main__':
     parser.add_argument('--id-mapping', action="store_true", help='')
 
     args = parser.parse_args()
-    preprocess_strings(args.nlcomp_dir, args.batch_size, id_mapping=args.id_mapping, save=True)
+    preprocess_strings(args.data_dir, args.batch_size, id_mapping=args.id_mapping, save=True)
 

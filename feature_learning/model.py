@@ -4,7 +4,7 @@ import torch.nn as nn
 
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
-BERT_OUTPUT_DIM = 768
+BERT_OUTPUT_DIM = 256
 
 
 class PositionEmbedding(nn.Module):
