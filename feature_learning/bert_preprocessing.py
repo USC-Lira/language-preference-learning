@@ -32,6 +32,7 @@ def preprocess_strings(nlcomp_dir, batch_size, nlcomp_list=None, id_mapping=Fals
             nlcomp_indexes.append(id_map[nlcomp])
         if save:
             np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes.npy'), np.asarray(nlcomp_indexes))
+            json.dump(unique_nlcomps, open(os.path.join(nlcomp_dir, 'unique_nlcomps.json'), 'w'))
 
         unbatched_input = unique_nlcomps
     else:
@@ -41,7 +42,6 @@ def preprocess_strings(nlcomp_dir, batch_size, nlcomp_list=None, id_mapping=Fals
     for sentence in unbatched_input:
         inputs = tokenizer(sentence, return_tensors="pt")
         bert_output = model(**inputs)
-
         embedding = bert_output.last_hidden_state
         embedding = torch.mean(embedding, dim=1, keepdim=False)
         # print("bert_output_embedding:", bert_output_embedding.shape)

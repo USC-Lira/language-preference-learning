@@ -3,17 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
-# import bert.extract_features as b
+from transformers import AutoModel, AutoTokenizer
+
 from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
 import argparse
 import os
 from feature_learning.utils import timeStamped
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
-          decoder_hidden_dim=128, remove_lang_encoder_hidden=False, preprocessed_nlcomps=False, id_mapped=False,
-          initial_loss_check=False, freeze_bert=False):
+          decoder_hidden_dim=128, preprocessed_nlcomps=False, id_mapped=False,
+          initial_loss_check=False, finetune_bert=False):
     torch.manual_seed(seed)
     np.random.seed(seed)
     save_dir = timeStamped(exp_name)
@@ -24,10 +27,18 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     print("device:", device)
 
     # load it to the specified device, either gpu or cpu
+    lang_encoder = AutoModel.from_pretrained("google/bert_uncased_L-4_H-256_A-4")
     print("Initializing model and loading to device...")
-    model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, decoder_hidden_dim=decoder_hidden_dim,
-                              remove_lang_encoder_hidden=remove_lang_encoder_hidden,
+    model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=256,
+                              decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps).to(device)
+
+    if not finetune_bert:
+        for param in model.lang_encoder.parameters():
+            param.requires_grad = False
+
+    for name, param in model.named_parameters():
+        print(f"{name}: {param.requires_grad}")
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
@@ -42,9 +53,9 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     # Some file-handling logic first.
     if id_mapped:
         train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes.npy")
-        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps.npy")
+        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps.json")
         val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes.npy")
-        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps.npy")
+        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps.json")
 
         train_traj_a_index_file = os.path.join(data_dir, "train/traj_a_indexes.npy")
         train_traj_b_index_file = os.path.join(data_dir, "train/traj_b_indexes.npy")
@@ -65,12 +76,14 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         val_traj_a_file = os.path.join(data_dir, "val/traj_as.npy")
         val_traj_b_file = os.path.join(data_dir, "val/traj_bs.npy")
 
+    tokenizer = AutoTokenizer.from_pretrained("google/bert_uncased_L-4_H-256_A-4")
     if id_mapped:
         train_dataset = NLTrajComparisonDataset(train_nlcomp_index_file, train_traj_a_index_file,
-                                                train_traj_b_index_file,
+                                                train_traj_b_index_file, tokenizer=tokenizer,
                                                 preprocessed_nlcomps=preprocessed_nlcomps, id_mapped=id_mapped,
                                                 unique_nlcomp_file=train_unique_nlcomp_file, traj_file=train_traj_file)
         val_dataset = NLTrajComparisonDataset(val_nlcomp_index_file, val_traj_a_index_file, val_traj_b_index_file,
+                                              tokenizer=tokenizer,
                                               preprocessed_nlcomps=preprocessed_nlcomps, id_mapped=id_mapped,
                                               unique_nlcomp_file=val_unique_nlcomp_file, traj_file=val_traj_file)
     else:
@@ -119,13 +132,13 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         num_correct = 0
         for val_datapoint in val_loader:
             with torch.no_grad():
-                traj_a, traj_b, lang = val_datapoint
+                traj_a, traj_b, lang_tokens, lang_attention_maks = val_datapoint
                 traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
                 traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
-                if preprocessed_nlcomps:
-                    lang = torch.as_tensor(lang, dtype=torch.float32, device=device)
+                lang_tokens = torch.as_tensor(lang_tokens, dtype=torch.long, device=device)
+                lang_attention_maks = torch.as_tensor(lang_attention_maks, device=device).long()
                 # lang = torch.as_tensor(lang, device=device)
-                val_datapoint = (traj_a, traj_b, lang)
+                val_datapoint = (traj_a, traj_b, lang_tokens, lang_attention_maks)
                 pred = model(val_datapoint)
 
                 encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
@@ -153,18 +166,18 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     for epoch in range(epochs):
         loss = 0
         for train_datapoint in train_loader:
-            traj_a, traj_b, lang = train_datapoint
+            traj_a, traj_b, lang_tokens, lang_attention_maks = train_datapoint
 
             # load it to the active device
             # also cast down (from float64 in np) to float32, since PyTorch's matrices are float32.
             traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
             traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
-            if preprocessed_nlcomps:
-                lang = torch.as_tensor(lang, dtype=torch.float32, device=device)
+            lang_tokens = torch.as_tensor(lang_tokens, dtype=torch.long, device=device)
+            lang_attention_maks = torch.as_tensor(lang_attention_maks, dtype=torch.long, device=device)
             # lang = torch.as_tensor(lang, device=device)
 
             # train_datapoint = train_datapoint.to(device)  # Shouldn't be needed, since already on device
-            train_datapoint = (traj_a, traj_b, lang)
+            train_datapoint = (traj_a, traj_b, lang_tokens, lang_attention_maks)
 
             # reset the gradients back to zero
             optimizer.zero_grad()
@@ -313,10 +326,9 @@ if __name__ == '__main__':
     parser.add_argument('--weight-decay', type=float, default=0, help='')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128, help='')
     parser.add_argument('--decoder-hidden-dim', type=int, default=128, help='')
-    parser.add_argument('--remove-lang-encoder-hidden', action="store_true", help='')
     parser.add_argument('--preprocessed-nlcomps', action="store_true", help='')
     parser.add_argument('--id-mapped', action="store_true", help='whether the data is id mapped')
-    parser.add_argument('--freeze-bert', action="store_true", help='whether to freeze BERT')
+    parser.add_argument('--finetune-bert', action="store_true", help='whether to finetune BERT')
     parser.add_argument('--initial-loss-check', action="store_true", help='whether to check initial loss')
 
     args = parser.parse_args()
@@ -324,6 +336,5 @@ if __name__ == '__main__':
     trained_model = train(args.exp_name, args.seed, args.data_dir, args.epochs, args.batch_size,
                           learning_rate=args.lr, weight_decay=args.weight_decay,
                           encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
-                          remove_lang_encoder_hidden=args.remove_lang_encoder_hidden,
                           preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped,
-                          freeze_bert=args.freeze_bert, initial_loss_check=args.initial_loss_check)
+                          finetune_bert=args.finetune_bert, initial_loss_check=args.initial_loss_check)
