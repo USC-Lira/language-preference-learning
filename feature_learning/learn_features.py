@@ -232,13 +232,13 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         num_correct = 0
         for val_datapoint in val_loader:
             with torch.no_grad():
-                traj_a, traj_b, lang = val_datapoint
+                traj_a, traj_b, lang_tokens, lang_attention_maks = val_datapoint
                 traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
                 traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
-                if preprocessed_nlcomps:
-                    lang = torch.as_tensor(lang, dtype=torch.float32, device=device)
+                lang_tokens = torch.as_tensor(lang_tokens, dtype=torch.long, device=device)
+                lang_attention_maks = torch.as_tensor(lang_attention_maks, dtype=torch.long, device=device)
                 # lang = torch.as_tensor(lang, device=device)
-                val_datapoint = (traj_a, traj_b, lang)
+                val_datapoint = (traj_a, traj_b, lang_tokens, lang_attention_maks)
                 pred = model(val_datapoint)
 
                 encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
