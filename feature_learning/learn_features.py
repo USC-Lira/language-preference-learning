@@ -16,10 +16,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
           decoder_hidden_dim=128, preprocessed_nlcomps=False, id_mapped=False,
-          initial_loss_check=False, finetune_bert=False):
+          initial_loss_check=False, finetune_bert=False, model_save_dir=None):
     torch.manual_seed(seed)
     np.random.seed(seed)
-    save_dir = timeStamped(exp_name)
+    save_dir = os.path.join('exp', timeStamped(exp_name))
     os.makedirs(save_dir, exist_ok=True)
 
     #  use gpu if available
@@ -31,11 +31,16 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     print("Initializing model and loading to device...")
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=256,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
-                              preprocessed_nlcomps=preprocessed_nlcomps).to(device)
+                              preprocessed_nlcomps=preprocessed_nlcomps)
 
     if not finetune_bert:
+        # Freeze BERT in the first training stage
         for param in model.lang_encoder.parameters():
             param.requires_grad = False
+    else:
+        # Load the model to the specified device.
+        model.load_state_dict(torch.load(os.path.join(model_save_dir, "model_state_dict.pth")))
+        print("Loaded model from:", model_save_dir)
 
     for name, param in model.named_parameters():
         print(f"{name}: {param.requires_grad}")
@@ -43,6 +48,7 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    model.to(device)
 
     # mean-squared error loss
     mse = nn.MSELoss()
@@ -105,29 +111,6 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
 
     if initial_loss_check:
         print("Initial loss sanity check...")
-        # temp_loss = 0
-        # for train_datapoint in train_loader:
-        #     with torch.no_grad():
-        #         traj_a, traj_b, lang = train_datapoint
-        #         traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
-        #         traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
-        #         if preprocessed_nlcomps:
-        #             lang = torch.as_tensor(lang, dtype=torch.float32, device=device)
-        #         # lang = torch.as_tensor(lang, device=device)
-        #         train_datapoint = (traj_a, traj_b, lang)
-        #         pred = model(train_datapoint)
-        #
-        #         encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
-        #         reconstruction_loss = mse(decoded_traj_a, torch.mean(traj_a, dim=-2)) + mse(decoded_traj_b,
-        #                                                                                     torch.mean(traj_b, dim=-2))
-        #
-        #         dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
-        #         log_likelihood = torch.mean(logsigmoid(dot_prod))
-        #         log_likelihood_loss = -1 * log_likelihood
-        #
-        #         temp_loss += (reconstruction_loss + log_likelihood_loss).item()
-        # temp_loss /= len(train_loader)
-        # print("initial train loss:", temp_loss)
         temp_loss = 0
         num_correct = 0
         for val_datapoint in val_loader:
@@ -163,6 +146,7 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     val_cosine_similarities = []
     val_log_likelihoods = []
     accuracies = []
+    best_val_acc = 0
     for epoch in range(epochs):
         loss = 0
         for train_datapoint in train_loader:
@@ -262,22 +246,24 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         val_reconstruction_loss /= len(val_loader)
         val_cosine_similarity /= len(val_loader)
         val_log_likelihood /= len(val_loader)
-        accuracy = num_correct / len(val_dataset)
+        val_acc = num_correct / len(val_dataset)
 
         # display the epoch training loss
         print(
             "epoch : {}/{}, [train] loss = {:.6f}, [val] loss = {:.6f}, [val] reconstruction_loss = {:.6f}, [val] cosine_similarity = {:.6f}, [val] log_likelihood = {:.6f}, [val] accuracy = {:.6f}".format(
                 epoch + 1, epochs, loss, val_loss, val_reconstruction_loss, val_cosine_similarity, val_log_likelihood,
-                accuracy))
+                val_acc))
         # Don't forget to save the model (as we go)!
-        torch.save(model.state_dict(), os.path.join(save_dir, 'model_state_dict.pth'))
-        torch.save(model, os.path.join(save_dir, 'model.pth'))
+        torch.save(model.state_dict(), os.path.join(save_dir, 'model_state_dict_{}.pth'.format(epoch)))
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), os.path.join(save_dir, 'best_model_state_dict.pth'))
         train_losses.append(loss)
         val_losses.append(val_loss)
         val_reconstruction_losses.append(val_reconstruction_loss)
         val_cosine_similarities.append(val_cosine_similarity)
         val_log_likelihoods.append(val_log_likelihood)
-        accuracies.append(accuracy)
+        accuracies.append(val_acc)
         np.save(os.path.join(save_dir, 'train_losses.npy'), np.asarray(train_losses))
         np.save(os.path.join(save_dir, 'val_losses.npy'), np.asarray(val_losses))
         np.save(os.path.join(save_dir, 'val_reconstruction_losses.npy'), np.asarray(val_reconstruction_losses))
@@ -320,16 +306,17 @@ if __name__ == '__main__':
     parser.add_argument('--exp-name', type=str, default='feature_learning', help='The name of experiment')
     parser.add_argument('--seed', type=int, default=0, help='')
     parser.add_argument('--data-dir', type=str, default='data/', help='')
-    parser.add_argument('--epochs', type=int, default=100, help='')
-    parser.add_argument('--batch-size', type=int, default=256, help='')
+    parser.add_argument('--epochs', type=int, default=10, help='')
+    parser.add_argument('--batch-size', type=int, default=1024, help='')
     parser.add_argument('--lr', type=float, default=1e-3, help='')
     parser.add_argument('--weight-decay', type=float, default=0, help='')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128, help='')
     parser.add_argument('--decoder-hidden-dim', type=int, default=128, help='')
     parser.add_argument('--preprocessed-nlcomps', action="store_true", help='')
     parser.add_argument('--id-mapped', action="store_true", help='whether the data is id mapped')
-    parser.add_argument('--finetune-bert', action="store_true", help='whether to finetune BERT')
     parser.add_argument('--initial-loss-check', action="store_true", help='whether to check initial loss')
+    parser.add_argument('--finetune-bert', action="store_true", help='whether to finetune BERT')
+    parser.add_argument('--model-save-dir', type=str, default='feature_learning/', help='')
 
     args = parser.parse_args()
 
@@ -337,4 +324,5 @@ if __name__ == '__main__':
                           learning_rate=args.lr, weight_decay=args.weight_decay,
                           encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
                           preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped,
-                          finetune_bert=args.finetune_bert, initial_loss_check=args.initial_loss_check)
+                          initial_loss_check=args.initial_loss_check,
+                          finetune_bert=args.finetune_bert, model_save_dir=args.model_save_dir)
