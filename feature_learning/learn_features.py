@@ -13,7 +13,8 @@ INITIAL_LOSS_SANITY_CHECK = True
 
 
 def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
-          decoder_hidden_dim=128, remove_lang_encoder_hidden=False, preprocessed_nlcomps=False, id_mapped=False):
+          decoder_hidden_dim=128, bert_model='bert-base', remove_lang_encoder_hidden=False,
+          preprocessed_nlcomps=False, id_mapped=False):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -24,7 +25,7 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
     # load it to the specified device, either gpu or cpu
     print("Initializing model and loading to device...")
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, decoder_hidden_dim=decoder_hidden_dim,
-                              remove_lang_encoder_hidden=remove_lang_encoder_hidden,
+                              bert_model=bert_model, remove_lang_encoder_hidden=remove_lang_encoder_hidden,
                               preprocessed_nlcomps=preprocessed_nlcomps).to(device)
 
     # create an optimizer object
@@ -39,10 +40,10 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
 
     # Some file-handling logic first.
     if id_mapped:
-        train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes.npy")
-        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps.npy")
-        val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes.npy")
-        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps.npy")
+        train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes_{}.npy".format(bert_model))
+        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps_{}.npy".format(bert_model))
+        val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes_{}.npy".format(bert_model))
+        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps_{}.npy".format(bert_model))
 
         train_traj_a_index_file = os.path.join(data_dir, "train/traj_a_indexes.npy")
         train_traj_b_index_file = os.path.join(data_dir, "train/traj_b_indexes.npy")
@@ -82,10 +83,10 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
     # train_dataset, val_dataset = torch.utils.data.random_split(dataset, lengths=[0.9, 0.1], generator=generator)
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=256, shuffle=True, num_workers=4, pin_memory=True
+        train_dataset, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True
     )
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=32, shuffle=False, num_workers=4, pin_memory=True
+        val_dataset, batch_size=1024, shuffle=False, num_workers=4, pin_memory=True
     )
 
     if INITIAL_LOSS_SANITY_CHECK:
@@ -313,11 +314,13 @@ if __name__ == '__main__':
     parser.add_argument('--remove-lang-encoder-hidden', action="store_true", help='')
     parser.add_argument('--preprocessed-nlcomps', action="store_true", help='')
     parser.add_argument('--id-mapped', action="store_true", help='whether the data is id mapped')
+    parser.add_argument('--bert-model', type=str, default='bert-base', help='Which BERT model to use')
 
     args = parser.parse_args()
 
     trained_model = train(args.seed, args.data_dir, args.epochs, args.save_dir,
                           learning_rate=args.lr, weight_decay=args.weight_decay,
                           encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
+                          bert_model=args.bert_model,
                           remove_lang_encoder_hidden=args.remove_lang_encoder_hidden,
                           preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped)
