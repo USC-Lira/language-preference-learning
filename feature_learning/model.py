@@ -33,7 +33,7 @@ class NLTrajEncoder(nn.Module):
 
 
 class NLTrajAutoencoder(nn.Module):
-    def __init__(self, encoder_hidden_dim=128, decoder_hidden_dim=128, bert_model_name='bert-base',
+    def __init__(self, encoder_hidden_dim=128, decoder_hidden_dim=128, bert_model='bert-base',
                  remove_lang_encoder_hidden=False, preprocessed_nlcomps=False, **kwargs):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
@@ -55,11 +55,11 @@ class NLTrajAutoencoder(nn.Module):
         self.remove_lang_encoder_hidden = remove_lang_encoder_hidden
         if self.remove_lang_encoder_hidden:
             self.lang_encoder_layer = nn.Linear(
-                in_features=BERT_OUTPUT_DIM[bert_model_name], out_features=16
+                in_features=BERT_OUTPUT_DIM[bert_model], out_features=16
             )
         else:
             self.lang_encoder_hidden_layer = nn.Linear(
-                in_features=BERT_OUTPUT_DIM[bert_model_name], out_features=encoder_hidden_dim
+                in_features=BERT_OUTPUT_DIM[bert_model], out_features=encoder_hidden_dim
             )
             self.lang_encoder_output_layer = nn.Linear(
                 in_features=encoder_hidden_dim, out_features=16
