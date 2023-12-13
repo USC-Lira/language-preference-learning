@@ -13,6 +13,3 @@ def timeStamped(fname, fmt='{fname}_%Y%m%d_%H%M%S'):
     """
     return datetime.datetime.now().strftime(fmt).format(fname=fname)
 
-
-if __name__ == '__main__':
-    print(timeStamped('test'))
