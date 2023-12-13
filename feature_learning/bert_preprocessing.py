@@ -4,12 +4,7 @@ from transformers import AutoModel, AutoTokenizer
 import torch
 import argparse
 import os
-
-BERT_MODEL_NAME = {
-    'bert-base': 'google/bert_uncased_L-12_H-768_A-12',
-    'bert-mini': 'google/bert_uncased_L-4_H-256_A-4',
-    'bert-tiny': 'google/bert_uncased_L-4_H-128_A-2'
-}
+from feature_learning.utils import BERT_MODEL_NAME
 
 
 def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=False, save=False):

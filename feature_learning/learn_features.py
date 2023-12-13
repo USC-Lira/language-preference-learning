@@ -9,14 +9,14 @@ from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
 import argparse
 import os
-from feature_learning.utils import timeStamped
+from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
-          decoder_hidden_dim=128, preprocessed_nlcomps=False, id_mapped=False,
-          initial_loss_check=False, finetune_bert=False, model_save_dir=None):
+          decoder_hidden_dim=128, preprocessed_nlcomps=False, id_mapped=False, initial_loss_check=False,
+          finetune_bert=False, bert_model='bert-base', model_save_dir=None):
     torch.manual_seed(seed)
     np.random.seed(seed)
     save_dir = os.path.join('exp', timeStamped(exp_name))
@@ -27,9 +27,10 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     print("device:", device)
 
     # load it to the specified device, either gpu or cpu
-    lang_encoder = AutoModel.from_pretrained("google/bert_uncased_L-4_H-256_A-4")
+    lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[bert_model])
+    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[bert_model])
     print("Initializing model and loading to device...")
-    model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=256,
+    model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=BERT_OUTPUT_DIM[bert_model],
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps)
 
@@ -39,8 +40,9 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
             param.requires_grad = False
     else:
         # Load the model to the specified device.
-        model.load_state_dict(torch.load(os.path.join(model_save_dir, "model_state_dict.pth")))
-        print("Loaded model from:", model_save_dir)
+        model_path = os.path.join(model_save_dir, "best_model_state_dict.pth")
+        print("Loaded model from:", model_path)
+        model.load_state_dict(torch.load(model_path))
 
     for name, param in model.named_parameters():
         print(f"{name}: {param.requires_grad}")
@@ -58,10 +60,10 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
 
     # Some file-handling logic first.
     if id_mapped:
-        train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes.npy")
-        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps.json")
-        val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes.npy")
-        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps.json")
+        train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes_{}.npy".format(bert_model))
+        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps_{}.json".format(bert_model))
+        val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes_{}.npy".format(bert_model))
+        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps_{}.json".format(bert_model))
 
         train_traj_a_index_file = os.path.join(data_dir, "train/traj_a_indexes.npy")
         train_traj_b_index_file = os.path.join(data_dir, "train/traj_b_indexes.npy")
@@ -82,7 +84,6 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         val_traj_a_file = os.path.join(data_dir, "val/traj_as.npy")
         val_traj_b_file = os.path.join(data_dir, "val/traj_bs.npy")
 
-    tokenizer = AutoTokenizer.from_pretrained("google/bert_uncased_L-4_H-256_A-4")
     if id_mapped:
         train_dataset = NLTrajComparisonDataset(train_nlcomp_index_file, train_traj_a_index_file,
                                                 train_traj_b_index_file, tokenizer=tokenizer,
@@ -316,7 +317,8 @@ if __name__ == '__main__':
     parser.add_argument('--id-mapped', action="store_true", help='whether the data is id mapped')
     parser.add_argument('--initial-loss-check', action="store_true", help='whether to check initial loss')
     parser.add_argument('--finetune-bert', action="store_true", help='whether to finetune BERT')
-    parser.add_argument('--model-save-dir', type=str, default='feature_learning/', help='')
+    parser.add_argument('--model-save-dir', type=str, default='feature_learning/', help='where to save the model')
+    parser.add_argument('--bert-model', type=str, default='bert-base', help='which BERT model to use')
 
     args = parser.parse_args()
 
@@ -325,4 +327,5 @@ if __name__ == '__main__':
                           encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
                           preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped,
                           initial_loss_check=args.initial_loss_check,
-                          finetune_bert=args.finetune_bert, model_save_dir=args.model_save_dir)
+                          finetune_bert=args.finetune_bert, bert_model=args.bert_model,
+                          model_save_dir=args.model_save_dir)
