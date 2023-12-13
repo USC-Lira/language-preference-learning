@@ -27,7 +27,7 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, decoder_hidden_dim=decoder_hidden_dim,
                               bert_model=bert_model, remove_lang_encoder_hidden=remove_lang_encoder_hidden,
                               preprocessed_nlcomps=preprocessed_nlcomps).to(device)
-
+    print(model)
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -37,6 +37,9 @@ def train(seed, data_dir, epochs, save_dir, learning_rate=1e-3, weight_decay=0, 
     logsigmoid = nn.LogSigmoid()
 
     print("Loading dataset...")
+
+    if not os.path.isdir(save_dir):
+        os.makedirs(save_dir)
 
     # Some file-handling logic first.
     if id_mapped:

@@ -48,7 +48,7 @@ def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=Fals
 
         embedding = bert_output.last_hidden_state
         embedding = torch.mean(embedding, dim=1, keepdim=False)
-        # print("bert_output_embedding:", bert_output_embedding.shape)
+        # print("bert_output_embedding:", embedding.shape)
         bert_output_embeddings.append(embedding.detach().numpy())
 
     if id_mapping:
