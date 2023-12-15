@@ -234,25 +234,25 @@ if __name__ == '__main__':
     train_trajectories = np.load(os.path.join(data_dir, 'train/trajs.npy'))
     val_trajectories = np.load(os.path.join(data_dir, 'val/trajs.npy'))
 
-    # train_traj_as, train_traj_bs, train_comps = generate_dataset(train_trajectories,
-    #                                                              noise_augmentation=noise_augmentation,
-    #                                                              id_mapping=id_mapping,
-    #                                                              all_pairs=all_pairs,
-    #                                                              dataset_size=dataset_size,
-    #                                                              lang_aug=True)
-    # if id_mapping:
-    #     train_output_dir = os.path.join(output_dir, 'train')
-    #     if not os.path.isdir(train_output_dir):
-    #         os.makedirs(train_output_dir)
-    #     print("SAVING TO:", train_output_dir)
-    #     np.save(os.path.join(output_dir, 'train/traj_a_indexes.npy'), train_traj_as)
-    #     np.save(os.path.join(output_dir, 'train/traj_b_indexes.npy'), train_traj_bs)
-    #     # np.save(os.path.join(output_dir, 'train/trajs.npy'), train_trajectories)
-    #     # NOT_TODO: save trajectory rewards too.
-    #     # NOTE: No longer any need to save trajectory rewards, since trajectories contain all info to reconstruct
-    #     # ground truth reward (using robosuite.environments.manipulation.lift_features.gt_reward).
-    #     with open(os.path.join(output_dir, 'train/nlcomps.json'), 'w') as f:
-    #         json.dump(train_comps, f)
+    train_traj_as, train_traj_bs, train_comps = generate_dataset(train_trajectories,
+                                                                 noise_augmentation=noise_augmentation,
+                                                                 id_mapping=id_mapping,
+                                                                 all_pairs=all_pairs,
+                                                                 dataset_size=dataset_size,
+                                                                 lang_aug=True)
+    if id_mapping:
+        train_output_dir = os.path.join(output_dir, 'train')
+        if not os.path.isdir(train_output_dir):
+            os.makedirs(train_output_dir)
+        print("SAVING TO:", train_output_dir)
+        np.save(os.path.join(output_dir, 'train/traj_a_indexes.npy'), train_traj_as)
+        np.save(os.path.join(output_dir, 'train/traj_b_indexes.npy'), train_traj_bs)
+        # np.save(os.path.join(output_dir, 'train/trajs.npy'), train_trajectories)
+        # NOT_TODO: save trajectory rewards too.
+        # NOTE: No longer any need to save trajectory rewards, since trajectories contain all info to reconstruct
+        # ground truth reward (using robosuite.environments.manipulation.lift_features.gt_reward).
+        with open(os.path.join(output_dir, 'train/nlcomps.json'), 'w') as f:
+            json.dump(train_comps, f)
 
     val_traj_as, val_traj_bs, val_comps = generate_dataset(val_trajectories,
                                                            id_mapping=id_mapping, all_pairs=True, lang_aug=True,

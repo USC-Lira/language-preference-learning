@@ -19,7 +19,7 @@ def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=Fals
         nlcomps = nlcomp_list
 
     if id_mapping:
-        unique_nlcomps = list(set(nlcomps))
+        unique_nlcomps = list(sorted(set(nlcomps)))
         id_map = dict()
         for i, unique_nlcomp in enumerate(unique_nlcomps):
             id_map[unique_nlcomp] = i
