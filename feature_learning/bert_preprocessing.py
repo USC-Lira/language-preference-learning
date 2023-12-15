@@ -4,12 +4,9 @@ from transformers import AutoModel, AutoTokenizer
 import torch
 import argparse
 import os
+from feature_learning.utils import BERT_MODEL_NAME
 
-BERT_MODEL_NAME = {
-    'bert-base': 'google/bert_uncased_L-12_H-768_A-12',
-    'bert-mini': 'google/bert_uncased_L-4_H-256_A-4',
-    'bert-tiny': 'google/bert_uncased_L-4_H-128_A-2'
-}
+os.environ["OMP_NUM_THREADS"] = "4"
 
 
 def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=False, save=False):
@@ -23,32 +20,33 @@ def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=Fals
     else:
         nlcomps = nlcomp_list
 
-    if id_mapping:
-        unique_nlcomps = list(set(nlcomps))
-        id_map = dict()
-        for i, unique_nlcomp in enumerate(unique_nlcomps):
-            id_map[unique_nlcomp] = i
+    # Get unique nlcomps (sorted by alphabetical order)
+    unique_nlcomps = list(sorted(set(nlcomps)))
+    id_map = dict()
+    for i, unique_nlcomp in enumerate(unique_nlcomps):
+        id_map[unique_nlcomp] = i
 
-        nlcomp_indexes = []
-        for nlcomp in nlcomps:
-            nlcomp_indexes.append(id_map[nlcomp])
-        if save:
-            np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes_{}.npy'.format(bert_model)), np.asarray(nlcomp_indexes))
+    # Save the index mapping and unique nlcomps
+    nlcomp_indexes = []
+    for nlcomp in nlcomps:
+        nlcomp_indexes.append(id_map[nlcomp])
+    if save:
+        np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes_{}.npy'.format(bert_model)), np.asarray(nlcomp_indexes))
+        json.dump(unique_nlcomps, open(os.path.join(nlcomp_dir, 'unique_nlcomps_{}.json'.format(bert_model)), 'w'))
 
-        unbatched_input = unique_nlcomps
-    else:
-        unbatched_input = nlcomps
+    unbatched_input = unique_nlcomps
 
+    # Get BERT embeddings
     tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[bert_model])
     model = AutoModel.from_pretrained(BERT_MODEL_NAME[bert_model])
     bert_output_embeddings = []
     for sentence in unbatched_input:
         inputs = tokenizer(sentence, return_tensors="pt")
         bert_output = model(**inputs)
-
         embedding = bert_output.last_hidden_state
+
+        # Average across the sequence to get a sentence-level embedding
         embedding = torch.mean(embedding, dim=1, keepdim=False)
-        # print("bert_output_embedding:", embedding.shape)
         bert_output_embeddings.append(embedding.detach().numpy())
 
     if id_mapping:
@@ -73,4 +71,3 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     preprocess_strings(args.data_dir, args.bert_model, id_mapping=args.id_mapping, save=True)
-

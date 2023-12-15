@@ -2,13 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from feature_learning.utils import BERT_OUTPUT_DIM
+
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
-BERT_OUTPUT_DIM = {
-    'bert-base': 768,
-    'bert-mini': 256,
-    'bert-tiny': 128
-}
 
 
 class PositionEmbedding(nn.Module):
@@ -33,66 +30,57 @@ class NLTrajEncoder(nn.Module):
 
 
 class NLTrajAutoencoder(nn.Module):
-    def __init__(self, encoder_hidden_dim=128, decoder_hidden_dim=128, bert_model='bert-base',
-                 remove_lang_encoder_hidden=False, preprocessed_nlcomps=False, **kwargs):
+    def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
+                 bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
+                 use_bert_encoder=False):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
-        self.traj_encoder_hidden_layer = nn.Linear(
-            in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim
+        self.traj_encoder = nn.Sequential(
+            nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
         )
-        self.traj_encoder_output_layer = nn.Linear(
-            in_features=encoder_hidden_dim, out_features=16
-        )
-        self.traj_decoder_hidden_layer = nn.Linear(
-            in_features=16, out_features=decoder_hidden_dim
-        )
-        self.traj_decoder_output_layer = nn.Linear(
-            in_features=decoder_hidden_dim, out_features=STATE_DIM + ACTION_DIM
+        self.traj_decoder = nn.Sequential(
+            nn.Linear(in_features=feature_dim, out_features=decoder_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(in_features=decoder_hidden_dim, out_features=STATE_DIM + ACTION_DIM),
         )
 
         self.preprocessed_nlcomps = preprocessed_nlcomps
         # Note: the first language encoder layer is BERT.
-        self.remove_lang_encoder_hidden = remove_lang_encoder_hidden
-        if self.remove_lang_encoder_hidden:
-            self.lang_encoder_layer = nn.Linear(
-                in_features=BERT_OUTPUT_DIM[bert_model], out_features=16
-            )
+        self.use_bert_encoder = use_bert_encoder
+        if use_bert_encoder:
+            assert lang_encoder is not None
+            self.lang_encoder = lang_encoder
         else:
-            self.lang_encoder_hidden_layer = nn.Linear(
-                in_features=BERT_OUTPUT_DIM[bert_model], out_features=encoder_hidden_dim
-            )
-            self.lang_encoder_output_layer = nn.Linear(
-                in_features=encoder_hidden_dim, out_features=16
-            )
-        self.lang_decoder_output_layer = None  # TODO: implement language decoder later.
+            self.lang_encoder = nn.Linear(in_features=bert_output_dim, out_features=feature_dim)
 
     # Input is a tuple with (trajectory_a, trajectory_b, language)
     # traj_a has shape (n_trajs, n_timesteps, state+action)
     def forward(self, inputs):
-        traj_a = inputs[0]
-        traj_b = inputs[1]
-        lang = inputs[2]
+        traj_a = inputs['traj_a']
+        traj_b = inputs['traj_b']
 
         # Encode trajectories
-        encoded_traj_a = self.traj_encoder_output_layer(torch.relu(self.traj_encoder_hidden_layer(traj_a)))
-        encoded_traj_b = self.traj_encoder_output_layer(torch.relu(self.traj_encoder_hidden_layer(traj_b)))
+        encoded_traj_a = self.traj_encoder(traj_a)
+        encoded_traj_b = self.traj_encoder(traj_b)
         # Take the mean over timesteps
         encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
         encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
 
-        bert_output_embeddings = lang
-
         # Encode the language
-        if self.remove_lang_encoder_hidden:
-            encoded_lang = torch.relu(self.lang_encoder_layer(bert_output_embeddings))
+        if self.use_bert_encoder:
+            lang_tokens = inputs['nlcomp_tokens']
+            lang_attention_mask = inputs['attention_mask']
+            bert_outputs = self.lang_encoder(lang_tokens, attention_mask=lang_attention_mask)
+            bert_embeddings = bert_outputs.last_hidden_state
+            encoded_lang = torch.mean(bert_embeddings, dim=1, keepdim=False)
         else:
-            encoded_lang = self.lang_encoder_output_layer(
-                torch.relu(self.lang_encoder_hidden_layer(bert_output_embeddings)))
-
+            lang_embeds = inputs['nlcomp']
+            encoded_lang = self.lang_encoder(lang_embeds)
         # NOTE: traj_a is the reference, traj_b is the updated
-
-        decoded_traj_a = self.traj_decoder_output_layer(torch.relu(self.traj_decoder_hidden_layer(encoded_traj_a)))
-        decoded_traj_b = self.traj_decoder_output_layer(torch.relu(self.traj_decoder_hidden_layer(encoded_traj_b)))
+        decoded_traj_a = self.traj_decoder(encoded_traj_a)
+        decoded_traj_b = self.traj_decoder(encoded_traj_b)
 
         output = (encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b)
         return output
