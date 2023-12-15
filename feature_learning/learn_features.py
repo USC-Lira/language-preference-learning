@@ -1,3 +1,5 @@
+import os
+import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,29 +9,25 @@ from transformers import AutoModel, AutoTokenizer
 
 from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
-import argparse
-import os
-from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM
+from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM, create_logger
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
+def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0, encoder_hidden_dim=128,
           decoder_hidden_dim=128, preprocessed_nlcomps=False, id_mapped=False, initial_loss_check=False,
-          finetune_bert=False, bert_model='bert-base', model_save_dir=None):
+          finetune_bert=False, bert_model='bert-base'):
     torch.manual_seed(seed)
     np.random.seed(seed)
-    save_dir = os.path.join('exp', timeStamped(exp_name))
-    os.makedirs(save_dir, exist_ok=True)
 
     #  use gpu if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("device:", device)
+    logger.info(f"device: {device}")
 
     # load it to the specified device, either gpu or cpu
     lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[bert_model])
     tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[bert_model])
-    print("Initializing model and loading to device...")
+    logger.info("Initializing model and loading to device...")
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=BERT_OUTPUT_DIM[bert_model],
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps)
@@ -40,12 +38,12 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
             param.requires_grad = False
     else:
         # Load the model to the specified device.
-        model_path = os.path.join(model_save_dir, "best_model_state_dict.pth")
-        print("Loaded model from:", model_path)
+        model_path = os.path.join(exp_dir, "best_model_state_dict.pth")
+        logger.info(f"Loaded model from: {model_path}")
         model.load_state_dict(torch.load(model_path))
 
     for name, param in model.named_parameters():
-        print(f"{name}: {param.requires_grad}")
+        logger.info(f"{name}: {param.requires_grad}")
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
@@ -56,48 +54,29 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     mse = nn.MSELoss()
     logsigmoid = nn.LogSigmoid()
 
-    print("Loading dataset...")
+    logger.info("Loading dataset...")
 
     # Some file-handling logic first.
-    if id_mapped:
-        train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes_{}.npy".format(bert_model))
-        train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps_{}.json".format(bert_model))
-        val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes_{}.npy".format(bert_model))
-        val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps_{}.json".format(bert_model))
+    train_nlcomp_index_file = os.path.join(data_dir, "train/nlcomp_indexes_{}.npy".format(bert_model))
+    train_unique_nlcomp_file = os.path.join(data_dir, "train/unique_nlcomps_{}.json".format(bert_model))
+    val_nlcomp_index_file = os.path.join(data_dir, "val/nlcomp_indexes_{}.npy".format(bert_model))
+    val_unique_nlcomp_file = os.path.join(data_dir, "val/unique_nlcomps_{}.json".format(bert_model))
 
-        train_traj_a_index_file = os.path.join(data_dir, "train/traj_a_indexes.npy")
-        train_traj_b_index_file = os.path.join(data_dir, "train/traj_b_indexes.npy")
-        train_traj_file = os.path.join(data_dir, "train/trajs.npy")
-        val_traj_a_index_file = os.path.join(data_dir, "val/traj_a_indexes.npy")
-        val_traj_b_index_file = os.path.join(data_dir, "val/traj_b_indexes.npy")
-        val_traj_file = os.path.join(data_dir, "val/trajs.npy")
-    else:
-        if preprocessed_nlcomps:
-            train_nlcomp_file = os.path.join(data_dir, "train/nlcomps.npy")
-            val_nlcomp_file = os.path.join(data_dir, "val/nlcomps.npy")
-        else:
-            train_nlcomp_file = os.path.join(data_dir, "train/nlcomps.json")
-            val_nlcomp_file = os.path.join(data_dir, "val/nlcomps.json")
+    train_traj_a_index_file = os.path.join(data_dir, "train/traj_a_indexes.npy")
+    train_traj_b_index_file = os.path.join(data_dir, "train/traj_b_indexes.npy")
+    train_traj_file = os.path.join(data_dir, "train/trajs.npy")
+    val_traj_a_index_file = os.path.join(data_dir, "val/traj_a_indexes.npy")
+    val_traj_b_index_file = os.path.join(data_dir, "val/traj_b_indexes.npy")
+    val_traj_file = os.path.join(data_dir, "val/trajs.npy")
 
-        train_traj_a_file = os.path.join(data_dir, "train/traj_as.npy")
-        train_traj_b_file = os.path.join(data_dir, "train/traj_bs.npy")
-        val_traj_a_file = os.path.join(data_dir, "val/traj_as.npy")
-        val_traj_b_file = os.path.join(data_dir, "val/traj_bs.npy")
-
-    if id_mapped:
-        train_dataset = NLTrajComparisonDataset(train_nlcomp_index_file, train_traj_a_index_file,
-                                                train_traj_b_index_file, tokenizer=tokenizer,
-                                                preprocessed_nlcomps=preprocessed_nlcomps, id_mapped=id_mapped,
-                                                unique_nlcomp_file=train_unique_nlcomp_file, traj_file=train_traj_file)
-        val_dataset = NLTrajComparisonDataset(val_nlcomp_index_file, val_traj_a_index_file, val_traj_b_index_file,
-                                              tokenizer=tokenizer,
-                                              preprocessed_nlcomps=preprocessed_nlcomps, id_mapped=id_mapped,
-                                              unique_nlcomp_file=val_unique_nlcomp_file, traj_file=val_traj_file)
-    else:
-        train_dataset = NLTrajComparisonDataset(train_nlcomp_file, train_traj_a_file, train_traj_b_file,
-                                                preprocessed_nlcomps=preprocessed_nlcomps)
-        val_dataset = NLTrajComparisonDataset(val_nlcomp_file, val_traj_a_file, val_traj_b_file,
-                                              preprocessed_nlcomps=preprocessed_nlcomps)
+    train_dataset = NLTrajComparisonDataset(train_nlcomp_index_file, train_traj_a_index_file,
+                                            train_traj_b_index_file, tokenizer=tokenizer,
+                                            preprocessed_nlcomps=preprocessed_nlcomps, id_mapped=id_mapped,
+                                            unique_nlcomp_file=train_unique_nlcomp_file, traj_file=train_traj_file)
+    val_dataset = NLTrajComparisonDataset(val_nlcomp_index_file, val_traj_a_index_file, val_traj_b_index_file,
+                                          tokenizer=tokenizer,
+                                          preprocessed_nlcomps=preprocessed_nlcomps, id_mapped=id_mapped,
+                                          unique_nlcomp_file=val_unique_nlcomp_file, traj_file=val_traj_file)
 
     # NOTE: this creates a dataset that doesn't have trajectories separated across datasets. DEPRECATED.
     # generator = torch.Generator().manual_seed(seed)
@@ -111,7 +90,7 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
     )
 
     if initial_loss_check:
-        print("Initial loss sanity check...")
+        logger.info("Initial loss sanity check...")
         temp_loss = 0
         num_correct = 0
         for val_datapoint in val_loader:
@@ -138,9 +117,9 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
 
         temp_loss /= len(val_loader)
         accuracy = num_correct / len(val_dataset)
-        print("initial val loss: {:.4f}, accuracy: {:.4f}".format(temp_loss, accuracy))
+        logger.info("initial val loss: {:.4f}, accuracy: {:.4f}".format(temp_loss, accuracy))
 
-    print("Beginning training...")
+    logger.info("Beginning training...")
     train_losses = []
     val_losses = []
     val_reconstruction_losses = []
@@ -204,6 +183,7 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
 
             # add the mini-batch training loss to epoch loss
             loss += train_loss.item()
+            break
 
         # compute the epoch training loss
         # Note: this is the per-BATCH loss. len(train_loader) gives number of batches.
@@ -242,6 +222,7 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
 
                 val_loss += (reconstruction_loss + log_likelihood_loss).item()
                 num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
+                break
 
         val_loss /= len(val_loader)
         val_reconstruction_loss /= len(val_loader)
@@ -250,8 +231,8 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         val_acc = num_correct / len(val_dataset)
 
         # display the epoch training loss
-        print(
-            "epoch : {}/{}, [train] loss = {:.6f}, [val] loss = {:.6f}, [val] reconstruction_loss = {:.6f}, [val] cosine_similarity = {:.6f}, [val] log_likelihood = {:.6f}, [val] accuracy = {:.6f}".format(
+        logger.info(
+            "epoch : {}/{}, [train] loss = {:.4f}, [val] loss = {:.4f}, [val] reconstruction_loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.6f}".format(
                 epoch + 1, epochs, loss, val_loss, val_reconstruction_loss, val_cosine_similarity, val_log_likelihood,
                 val_acc))
         # Don't forget to save the model (as we go)!
@@ -272,32 +253,6 @@ def train(exp_name, seed, data_dir, epochs, batch_size, learning_rate=1e-3, weig
         np.save(os.path.join(save_dir, 'val_log_likelihoods.npy'), np.asarray(val_log_likelihoods))
         np.save(os.path.join(save_dir, 'accuracies.npy'), np.asarray(accuracies))
 
-    # # Evaluation
-    # num_correct = 0
-    # log_likelihood = 0
-    # for val_datapoint in val_loader:
-    #     with torch.no_grad():
-    #         traj_a, traj_b, lang = val_datapoint
-    #         traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
-    #         traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
-    #         # lang = torch.as_tensor(lang, device=device)
-    #
-    #         val_datapoint = (traj_a, traj_b, lang)
-    #         pred = model(val_datapoint)
-    #         encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
-    #
-    #         encoded_traj_a = encoded_traj_a.detach().cpu().numpy()
-    #         encoded_traj_b = encoded_traj_b.detach().cpu().numpy()
-    #         encoded_lang = encoded_lang.detach().cpu().numpy()
-    #
-    #         dot_prod = np.dot(encoded_traj_b-encoded_traj_a, encoded_lang)
-    #         if dot_prod > 0:
-    #             num_correct += 1
-    #         log_likelihood += np.log(1/(1 + np.exp(-dot_prod)))
-    #
-    # accuracy = num_correct / len(val_loader)
-    # print("final accuracy:", accuracy)
-    # print("final log likelihood:", log_likelihood)
     return model
 
 
@@ -322,10 +277,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    trained_model = train(args.exp_name, args.seed, args.data_dir, args.epochs, args.batch_size,
+    # Create exp directory and logger
+    exp_dir = os.path.join('exp', timeStamped(args.exp_name))
+    os.makedirs(exp_dir, exist_ok=True)
+    logger = create_logger(exp_dir)
+
+    trained_model = train(logger, args.seed, args.data_dir, exp_dir, args.epochs, args.batch_size,
                           learning_rate=args.lr, weight_decay=args.weight_decay,
                           encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
                           preprocessed_nlcomps=args.preprocessed_nlcomps, id_mapped=args.id_mapped,
                           initial_loss_check=args.initial_loss_check,
-                          finetune_bert=args.finetune_bert, bert_model=args.bert_model,
-                          model_save_dir=args.model_save_dir)
+                          finetune_bert=args.finetune_bert, bert_model=args.bert_model)

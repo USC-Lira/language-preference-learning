@@ -1,4 +1,7 @@
+import os
 import datetime
+import logging
+import colorlog
 
 BERT_MODEL_NAME = {
     'bert-base': 'google/bert_uncased_L-12_H-768_A-12',
@@ -25,3 +28,18 @@ def timeStamped(fname, fmt='{fname}_%Y%m%d_%H%M%S'):
     """
     return datetime.datetime.now().strftime(fmt).format(fname=fname)
 
+
+def create_logger(exp_dir):
+    logger = logging.getLogger("feature_learning")
+    logger.setLevel(logging.INFO)
+
+    file_handler = logging.FileHandler(os.path.join(exp_dir, 'log.txt'))
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    return logger
