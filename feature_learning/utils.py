@@ -31,7 +31,7 @@ def timeStamped(fname, fmt='{fname}_%Y%m%d_%H%M%S'):
 
 def create_logger(exp_dir):
     logger = logging.getLogger("feature_learning")
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     file_handler = logging.FileHandler(os.path.join(exp_dir, 'log.txt'))
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -39,6 +39,7 @@ def create_logger(exp_dir):
     logger.addHandler(file_handler)
 
     console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
     stream_formatter = logging.Formatter('%(message)s')
     console_handler.setFormatter(stream_formatter)
     logger.addHandler(console_handler)

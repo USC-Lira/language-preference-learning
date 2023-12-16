@@ -52,7 +52,7 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
             model.load_state_dict(torch.load(model_path))
 
     for name, param in model.named_parameters():
-        logger.info(f"{name}: {param.requires_grad}")
+        logger.debug(f"{name}: {param.requires_grad}")
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
@@ -186,7 +186,6 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
 
             # add the mini-batch training loss to epoch loss
             loss += train_loss.item()
-            break
 
         # compute the epoch training loss
         # Note: this is the per-BATCH loss. len(train_loader) gives number of batches.
