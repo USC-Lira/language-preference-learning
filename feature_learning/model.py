@@ -53,7 +53,11 @@ class NLTrajAutoencoder(nn.Module):
             assert lang_encoder is not None
             self.lang_encoder = lang_encoder
         else:
-            self.lang_encoder = nn.Linear(in_features=bert_output_dim, out_features=feature_dim)
+            self.lang_encoder = nn.Sequential(
+                nn.Linear(in_features=bert_output_dim, out_features=encoder_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
+            )
 
     # Input is a tuple with (trajectory_a, trajectory_b, language)
     # traj_a has shape (n_trajs, n_timesteps, state+action)

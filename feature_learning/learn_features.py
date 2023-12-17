@@ -302,7 +302,7 @@ if __name__ == '__main__':
         # Stage 2: co-finetune BERT and the trajectory encoder
         logger.info('\n------------------ Co-finetune BERT ------------------')
         train(logger, args.seed, args.data_dir, exp_dir, args.epochs, args.batch_size,
-              learning_rate=args.lr, weight_decay=args.weight_decay,
+              learning_rate=0.0002, weight_decay=args.weight_decay,
               encoder_hidden_dim=args.encoder_hidden_dim, decoder_hidden_dim=args.decoder_hidden_dim,
               preprocessed_nlcomps=args.preprocessed_nlcomps,
               initial_loss_check=args.initial_loss_check,
