@@ -70,11 +70,11 @@ class TransformerModel(nn.Module):
         self.linear = nn.Linear(d_model, input_size)
 
     def forward(self, x):
-        x = self.decoder(x)
+        x = self.decoder(x) # Assuming x is a 2D tensor of shape (sequence_length, input_size)
         x = self.pos_encoder(x)
-        x = x.permute(1, 0, 2)
+        x = x.permute(1, 0, 2) # Change shape to (batch_size, sequence_length, d_model)
         x = self.transformer_encoder(x)
-        x = x.permute(1, 0, 2)
-        x = self.feedforward(x)
+        x = x.permute(1, 0, 2) # Change shape back to (sequence_length, batch_size, d_model)
+        x = self.feedforward(x) 
         x = self.linear(x)
         return x
