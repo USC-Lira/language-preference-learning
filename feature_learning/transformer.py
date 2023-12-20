@@ -1,94 +1,80 @@
 import torch
 import torch.nn as nn
-import torch
-import numpy as np
+import torch.nn.functional as F
 import math
-import time
-from torch.nn import TransformerEncoderLayer, TransformerEncoder
-from torch import Tensor
-
-torch.manual_seed(0)
-np.random.seed(0)
-
-class TransformerModel(nn.Module):
-    def __init__(self, input_size: int, d_model: int, nhead: int, d_hid: int,
-                 nlayers: int, dropout: float = 0.5):
-        super().__init__()
-        self.model_type = 'Transformer'
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
-        # TODO: Add in the multi-head attention layer and feed forward layer here!!!
-        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout)
-        self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
-
-        # Decoder for initial mapping
-        self.decoder = nn.Linear(input_size, d_model)
-
-        # Transformer input size = d_model b/c we have embeddings
-        self.linear = nn.Linear(d_model, input_size)
-
-        self.init_weights()
-
-    def init_weights(self):
-        initrange = 0.1
-        self.decoder.weight.data.uniform_(-initrange, initrange)
-        self.decoder.bias.data.zero_()
-        self.linear.weight.data.uniform_(-initrange, initrange)
-        self.linear.bias.data.zero_()
-
-    def forward(self, x):
-        # TODO: Add in the multi-head attention layer and feed forward layer here!!!
-        x = self.decoder(x)  # Assuming x is a 2D tensor of shape (sequence_length, input_size)
-        x = self.pos_encoder(x)
-        x = x.permute(1, 0, 2)  # Change shape to (batch_size, sequence_length, d_model)
-        x = self.transformer_encoder(x)
-        x = x.permute(1, 0, 2)  # Change shape back to (sequence_length, batch_size, d_model)
-        x = self.linear(x)
-        return x
-
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer('pe', pe)
 
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-        """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
-    
-class MultiHeadAttention(nn.module):
-    def __init__(self, d_model: int, nhead: int, dropout: float = 0.1):
-        super().__init__()
-        self.d_model = d_model
-        self.nhead = nhead
-        self.dropout = dropout
-        self.q_linear = nn.Linear(d_model, d_model)
-        self.v_linear = nn.Linear(d_model, d_model)
-        self.k_linear = nn.Linear(d_model, d_model)
-        self.out = nn.Linear(d_model, d_model)
+    def forward(self, x):
+        return x + self.pe[:x.size(0), :]
 
 class FeedForward(nn.Module):
-    def __init__(self, d_model: int, d_hid: int, dropout: float = 0.1):
-        super().__init__()
-        self.linear_1 = nn.Linear(d_model, d_hid)
+    def __init__(self, d_model, d_ff, dropout=0.1):
+        super(FeedForward, self).__init__()
+        self.linear1 = nn.Linear(d_model, d_ff)
         self.dropout = nn.Dropout(dropout)
-        self.linear_2 = nn.Linear(d_hid, d_model)
+        self.linear2 = nn.Linear(d_ff, d_model)
 
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-        """
-        x = self.dropout(torch.relu(self.linear_1(x)))
-        x = self.linear_2(x)
+    def forward(self, x):
+        x = F.relu(self.linear1(x))
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return x
+
+class MultiheadAttention(nn.Module):
+    def __init__(self, d_model, num_heads, dropout=0.0):
+        super(MultiheadAttention, self).__init__()
+        self.attn = nn.MultiheadAttention(d_model, num_heads, dropout=dropout)
+
+    def forward(self, x, mask=None):
+        return self.attn(x, x, x, attn_mask=mask)[0]
+
+class EncoderLayer(nn.Module):
+    def __init__(self, d_model=512, num_heads=8, dff=2048, dropout=0.0):
+        super(EncoderLayer, self).__init__()
+        self.norm_layer = nn.LayerNorm(d_model, eps=1e-6)
+        self.multi_head_attention = MultiheadAttention(d_model, num_heads, dropout)
+        self.dropout_attention = nn.Dropout(dropout)
+        self.add_attention = nn.Add()
+        self.feedforward = FeedForward(d_model, dff, dropout)
+
+    def forward(self, inputs, mask=None):
+        x = inputs
+        attention_output = self.multi_head_attention(x, mask=mask)
+        x = x + self.dropout_attention(attention_output)
+        x = self.norm_layer(x)
+
+        feedforward_output = self.feedforward(x)
+        x = x + feedforward_output
+        x = self.norm_layer(x)
+
+        return x
+
+class TransformerModel(nn.Module):
+    def __init__(self, input_size, d_model, nhead, d_hid, nlayers, d_ff, dropout=0.5):
+        super().__init__()
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout) for _ in range(nlayers)])
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, nlayers)
+        self.feedforward = FeedForward(d_model, d_ff, dropout)
+        self.decoder = nn.Linear(input_size, d_model)
+        self.linear = nn.Linear(d_model, input_size)
+
+    def forward(self, x):
+        x = self.decoder(x)
+        x = self.pos_encoder(x)
+        x = x.permute(1, 0, 2)
+        x = self.transformer_encoder(x)
+        x = x.permute(1, 0, 2)
+        x = self.feedforward(x)
+        x = self.linear(x)
         return x
