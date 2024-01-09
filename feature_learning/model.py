@@ -2,18 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from feature_learning.utils import BERT_OUTPUT_DIM
+from feature_learning.transformer import TransformerEncoder
 
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
-
-
-class PositionEmbedding(nn.Module):
-    def __init__(self, d_model, max_seq_len=500):
-        super().__init__()
-        self.d_model = d_model
-        self.max_seq_len = max_seq_len
-        self.embedding = nn.Embedding(max_seq_len, d_model)
 
 
 class NLTrajEncoder(nn.Module):
@@ -32,14 +24,20 @@ class NLTrajEncoder(nn.Module):
 class NLTrajAutoencoder(nn.Module):
     def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
                  bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
-                 use_bert_encoder=False):
+                 use_bert_encoder=False, use_transformer_traj_encoder=False):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
-        self.traj_encoder = nn.Sequential(
-            nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
-        )
+        if use_transformer_traj_encoder:
+            self.traj_encoder = TransformerEncoder(
+                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=8, d_hid=encoder_hidden_dim,
+                nlayers=6, d_ff=feature_dim, dropout=0.1
+            )
+        else:
+            self.traj_encoder = nn.Sequential(
+                nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
+            )
         self.traj_decoder = nn.Sequential(
             nn.Linear(in_features=feature_dim, out_features=decoder_hidden_dim),
             nn.ReLU(),

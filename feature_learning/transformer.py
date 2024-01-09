@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -11,11 +12,12 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(max_len, d_model)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        return x + self.pe[:x.size(0), :]
+        return x + self.pe[:, :x.size(1)]
+
 
 class FeedForward(nn.Module):
     def __init__(self, d_model, d_ff, dropout=0.1):
@@ -30,6 +32,7 @@ class FeedForward(nn.Module):
         x = self.linear2(x)
         return x
 
+
 class MultiheadAttention(nn.Module):
     def __init__(self, d_model, num_heads, dropout=0.0):
         super(MultiheadAttention, self).__init__()
@@ -38,43 +41,44 @@ class MultiheadAttention(nn.Module):
     def forward(self, x, mask=None):
         return self.attn(x, x, x, attn_mask=mask)[0]
 
+
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model=512, num_heads=8, dff=2048, dropout=0.0):
+    def __init__(self, d_model=512, num_heads=8, dff=2048, dropout=0.0, norm_layer=True):
         super(EncoderLayer, self).__init__()
         self.norm_layer = nn.LayerNorm(d_model, eps=1e-6)
         self.multi_head_attention = MultiheadAttention(d_model, num_heads, dropout)
         self.dropout_attention = nn.Dropout(dropout)
-        self.add_attention = nn.Add()
         self.feedforward = FeedForward(d_model, dff, dropout)
+        self.dropout_ff = nn.Dropout(dropout)
 
     def forward(self, inputs, mask=None):
         x = inputs
-        attention_output = self.multi_head_attention(x, mask=mask)
+        # Put normalization layer inside residual connection according to https://arxiv.org/pdf/2002.04745.pdf
+        attention_output = self.multi_head_attention(self.norm_layer(x), mask=mask)
         x = x + self.dropout_attention(attention_output)
-        x = self.norm_layer(x)
 
-        feedforward_output = self.feedforward(x)
-        x = x + feedforward_output
-        x = self.norm_layer(x)
+        feedforward_output = self.feedforward(self.norm_layer(x))
+        x = x + self.dropout_ff(feedforward_output)
 
         return x
 
-class TransformerModel(nn.Module):
+
+class TransformerEncoder(nn.Module):
     def __init__(self, input_size, d_model, nhead, d_hid, nlayers, d_ff, dropout=0.5):
         super().__init__()
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
-        encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout) for _ in range(nlayers)])
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, nlayers)
+        self.pos_encoder = PositionalEncoding(d_model)
+        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout) for _ in range(nlayers)])
         self.feedforward = FeedForward(d_model, d_ff, dropout)
-        self.decoder = nn.Linear(input_size, d_model)
-        self.linear = nn.Linear(d_model, input_size)
+        self.embed = nn.Linear(input_size, d_model)
+        # self.linear = nn.Linear(d_model, input_size)
 
     def forward(self, x):
-        x = self.decoder(x) # Assuming x is a 2D tensor of shape (sequence_length, input_size)
+        # x has shape (batch_size, sequence length, input_size)
+        x = self.embed(x)  # Assuming x is a 2D tensor of shape (sequence_length, input_size)
         x = self.pos_encoder(x)
-        x = x.permute(1, 0, 2) # Change shape to (batch_size, sequence_length, d_model)
-        x = self.transformer_encoder(x)
-        x = x.permute(1, 0, 2) # Change shape back to (sequence_length, batch_size, d_model)
-        x = self.feedforward(x) 
-        x = self.linear(x)
+        for layer in self.encoder_layers:
+            x = layer(x)
+
+        x = self.feedforward(x)
+        # x = self.linear(x)
         return x
