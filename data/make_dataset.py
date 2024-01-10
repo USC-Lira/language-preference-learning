@@ -48,7 +48,7 @@ def generate_dataset(trajs, noise_augmentation=0, id_mapping=False, all_pairs=Tr
 
     augmented_comps_mapping = None
     if lang_aug:
-        augmented_comps_file = '/home/resl/language-preference-learning/data/train/GPT_augmented_dataset.json'
+        augmented_comps_file = '/data/GPT_augmented_dataset.json'
         with open(augmented_comps_file, 'r') as f:
             augmented_data = json.load(f)
 

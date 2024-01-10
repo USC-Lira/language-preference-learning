@@ -10,7 +10,7 @@ from feature_learning.model import NLTrajAutoencoder
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 
 
-def get_nearest_embed_distance(embed, embeds):
+def get_nearest_embed_distance(embed, lang_embed, embeds, index=None):
     """
         Get the nearest embedding to embed from embeds
         Input:
@@ -19,7 +19,11 @@ def get_nearest_embed_distance(embed, embeds):
         Output:
             the index of the nearest embedding in embeds
     """
-    return np.argmin(np.linalg.norm(embeds - embed, axis=1))
+    new_embed = embed + lang_embed
+    norm = np.linalg.norm(embeds - new_embed, axis=1)
+    if index:
+        norm = np.delete(norm, index)
+    return np.argmin(norm)
 
 
 def get_nearest_embed_cosine(embed, lang_embed, embeds):
@@ -35,11 +39,14 @@ def get_nearest_embed_cosine(embed, lang_embed, embeds):
 
 
 def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hidden_dim, preprocessed_nlcomps,
-         old_model=False):
+         old_model=False, debug=False):
     # Load the val trajectories and language comparisons first
     trajs = np.load('data/dataset/val/trajs.npy')
     nlcomps = json.load(open(f'data/dataset/val/unique_nlcomps_{bert_model}.json', 'rb'))
     nlcomps_bert_embeds = np.load(f'data/dataset/val/unique_nlcomps_{bert_model}.npy')
+    classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
+    greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
+    less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the model
@@ -76,16 +83,6 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
     traj_embeds = np.mean(encoded_trajs, axis=-2, keepdims=False)
 
     # Get the nearest trajectory embedding for each language comparison
-    traj = trajs[0]
-    traj_embed = traj_embeds[0]
-
-    value_func = {
-        "gt_reward": gt_reward,
-        "speed": speed,
-        "height": height,
-        "distance_to_bottle": distance_to_bottle,
-        "distance_to_cube": distance_to_cube
-    }
 
     lang_embeds = []
     if use_bert_encoder:
@@ -102,6 +99,7 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
             attention_mask = torch.from_numpy(np.asarray(attention_mask)).unsqueeze(0).to(device)
             lang_embed = model.lang_encoder(token_ids, attention_mask=attention_mask).detach().cpu().numpy()
             lang_embeds.append(lang_embed)
+
     else:
         for i, nlcomp_bert_embed in enumerate(nlcomps_bert_embeds):
             lang_embed = model.lang_encoder(
@@ -109,19 +107,50 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
             lang_embeds.append(lang_embed)
 
     # Get the nearest trajectory embedding given the language embedding
-    for lang_embed in lang_embeds:
-        nearest_traj_idx = get_nearest_embed_distance(traj_embed + lang_embed, traj_embeds)
-        nearest_traj = trajs[nearest_traj_idx]
-        traj1_feature_values = [[value_func[feature_name](traj[t]) for t in range(500)]
-                                for feature_name in value_func.keys()]
-        traj2_feature_values = [[value_func[feature_name](nearest_traj[t]) for t in range(500)]
-                                for feature_name in value_func.keys()]
+    total = 0
+    correct = 0
+    for traj_idx in range(len(trajs)):
+        traj = trajs[traj_idx]
+        traj_embed = traj_embeds[traj_idx]
+        print(len(lang_embeds))
+        for i, lang_embed in enumerate(lang_embeds):
+            # Todo: get the feature class name and print the feature values
+            nlcomp = nlcomps[i]
+            if nlcomp in classified_nlcomps['gt_reward']:
+                value_func = gt_reward
+                feature_name = "gt_reward"
+            elif nlcomp in classified_nlcomps['speed']:
+                value_func = speed
+                feature_name = "speed"
+            elif nlcomp in classified_nlcomps['height']:
+                value_func = height
+                feature_name = "height"
+            elif nlcomp in classified_nlcomps['distance_to_cube']:
+                value_func = distance_to_cube
+                feature_name = "distance_to_cube"
+            elif nlcomp in classified_nlcomps['distance_to_bottle']:
+                value_func = distance_to_bottle
+                feature_name = "distance_to_bottle"
+            else:
+                raise ValueError(f"NL comparison {nlcomp} not found in classified NL comparisons")
 
-        print(f"GT reward: {traj1_feature_values[0], traj2_feature_values[0]},"
-              f"Speed: {traj1_feature_values[1], traj2_feature_values[1]},",
-              f"Height: {traj1_feature_values[1], traj2_feature_values[2]},"
-              f"Distance to cube: {traj1_feature_values[3], traj2_feature_values[3]},"
-              f"Distance to bottle: {traj1_feature_values[4], traj2_feature_values[4]},")
+            nearest_traj_idx = get_nearest_embed_distance(traj_embed, lang_embed, traj_embeds, traj_idx)
+            nearest_traj = trajs[nearest_traj_idx]
+            traj1_feature_values = [value_func(traj[t]) for t in range(500)]
+            traj2_feature_values = [value_func(nearest_traj[t]) for t in range(500)]
+            if nlcomp in greater_nlcomps:
+                correct += np.mean(traj1_feature_values) <= np.mean(traj2_feature_values)
+                greater = True
+            elif nlcomp in less_nlcomps:
+                correct += np.mean(traj1_feature_values) >= np.mean(traj2_feature_values)
+                greater = False
+            else:
+                raise ValueError(f"NL comparison {nlcomp} not found in greater or less NL comparisons")
+            total += 1
+            if debug:
+                print(f"{nlcomp}, {greater}\n{feature_name}, traj1: {np.mean(traj1_feature_values)}, traj2: {np.mean(traj2_feature_values)}, {correct}")
+
+    print(f"Correct: {correct}/{total} ({correct / total})")
 
 
 if __name__ == '__main__':
