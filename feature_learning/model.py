@@ -24,13 +24,14 @@ class NLTrajEncoder(nn.Module):
 class NLTrajAutoencoder(nn.Module):
     def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
                  bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
-                 use_bert_encoder=False, use_transformer_traj_encoder=False):
+                 use_bert_encoder=False, use_traj_transformer=False):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
-        if use_transformer_traj_encoder:
+        self.use_traj_transformer = use_traj_transformer
+        if use_traj_transformer:
             self.traj_encoder = TransformerEncoder(
-                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=8, d_hid=encoder_hidden_dim,
-                nlayers=6, d_ff=feature_dim, dropout=0.1
+                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
+                nlayers=3, d_ff=feature_dim, dropout=0.1
             )
         else:
             self.traj_encoder = nn.Sequential(
@@ -67,8 +68,12 @@ class NLTrajAutoencoder(nn.Module):
         encoded_traj_a = self.traj_encoder(traj_a)
         encoded_traj_b = self.traj_encoder(traj_b)
         # Take the mean over timesteps
-        encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
-        encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+        if self.use_traj_transformer:
+            encoded_traj_a = encoded_traj_a[:, 0, :]
+            encoded_traj_b = encoded_traj_b[:, 0, :]
+        else:
+            encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
+            encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
 
         # Encode the language
         if self.use_bert_encoder:
