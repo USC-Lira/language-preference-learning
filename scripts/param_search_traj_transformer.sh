@@ -1,4 +1,5 @@
 # Param search for the number of heads and layers in the trajectory transformer
+# export CUDA_VISIBLE_DEVICES=0
 
 # Define the values for the number of heads and layers
 num_heads_values=(4 8)

@@ -272,7 +272,10 @@ if __name__ == '__main__':
     parser.add_argument('--model-save-dir', type=str, default='feature_learning/', help='where to save the model')
     parser.add_argument('--bert-model', type=str, default='bert-base', help='which BERT model to use')
     parser.add_argument('--use-bert-encoder', action="store_true", help='whether to use BERT in the language encoder')
-    parser.add_argument('--use-traj-transformer', action="store_true", help='whether to use transformer as the trajectory encoder')
+    parser.add_argument('--use-traj-transformer', action="store_true",
+                        help='whether to use transformer as the trajectory encoder')
+    parser.add_argument('--n-heads', type=int, default=4, help='number of heads in the multi-head attention')
+    parser.add_argument('--n-layers', type=int, default=3, help='number of layers in the trajectory transformer')
 
     args = parser.parse_args()
 
