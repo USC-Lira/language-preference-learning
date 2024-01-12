@@ -8,6 +8,7 @@ from transformers import AutoModel, AutoTokenizer
 from feature_learning.utils import BERT_MODEL_NAME, BERT_OUTPUT_DIM
 from feature_learning.model import NLTrajAutoencoder
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
+from model_analysis.utils import get_traj_lang_embeds
 
 
 def get_nearest_embed_distance(embed, lang_embed, embeds, index=None):
@@ -35,7 +36,29 @@ def get_nearest_embed_cosine(embed, lang_embed, embeds):
         Output:
             the index of the nearest embedding in embeds
     """
-    return np.argmax(np.dot(embeds - embed, lang_embed) / (np.linalg.norm(embeds - embed + 1e-5, axis=1) * np.linalg.norm(lang_embed)))
+    return np.argmax(np.dot(embeds - embed, lang_embed) / (
+                np.linalg.norm(embeds - embed + 1e-5, axis=1) * np.linalg.norm(lang_embed)))
+
+
+def get_feature_class(nlcomp, classified_nlcomps):
+    if nlcomp in classified_nlcomps['gt_reward']:
+        value_func = gt_reward
+        feature_name = "gt_reward"
+    elif nlcomp in classified_nlcomps['speed']:
+        value_func = speed
+        feature_name = "speed"
+    elif nlcomp in classified_nlcomps['height']:
+        value_func = height
+        feature_name = "height"
+    elif nlcomp in classified_nlcomps['distance_to_cube']:
+        value_func = distance_to_cube
+        feature_name = "distance_to_cube"
+    elif nlcomp in classified_nlcomps['distance_to_bottle']:
+        value_func = distance_to_bottle
+        feature_name = "distance_to_bottle"
+    else:
+        raise ValueError(f"NL comparison {nlcomp} not found in classified NL comparisons")
+    return value_func, feature_name
 
 
 def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hidden_dim, preprocessed_nlcomps,
@@ -78,66 +101,28 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
     model.to(device)
     model.eval()
 
-    # Get all the embeddings for the trajectories
-    encoded_trajs = model.traj_encoder(torch.from_numpy(trajs).float().to(device)).detach().cpu().numpy()
-    traj_embeds = np.mean(encoded_trajs, axis=-2, keepdims=False)
-
-    # Get the nearest trajectory embedding for each language comparison
-
-    lang_embeds = []
-    if use_bert_encoder:
-        for i, nlcomp in enumerate(nlcomps):
-            # First tokenize the NL comparison and get the embedding
-            tokens = tokenizer.tokenize(tokenizer.cls_token + " " + nlcomp + " " + tokenizer.sep_token)
-            token_ids = tokenizer.convert_tokens_to_ids(tokens)
-            # Pad sequences to the common length
-            padding_length = 64 - len(token_ids)
-            # Create attention mask
-            attention_mask = [1] * len(token_ids) + [0] * padding_length
-            token_ids += [tokenizer.pad_token_id] * padding_length
-            token_ids = torch.from_numpy(np.asarray(token_ids)).unsqueeze(0).to(device)
-            attention_mask = torch.from_numpy(np.asarray(attention_mask)).unsqueeze(0).to(device)
-            lang_embed = model.lang_encoder(token_ids, attention_mask=attention_mask).detach().cpu().numpy()
-            lang_embeds.append(lang_embed)
-
-    else:
-        for i, nlcomp_bert_embed in enumerate(nlcomps_bert_embeds):
-            lang_embed = model.lang_encoder(
-                torch.from_numpy(nlcomp_bert_embed).float().to(device)).detach().cpu().numpy()
-            lang_embeds.append(lang_embed)
+    # Get embeddings for the trajectories and language comparisons
+    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, tokenizer,
+                                                    nlcomps_bert_embeds)
 
     # Get the nearest trajectory embedding given the language embedding
     total = 0
     correct = 0
+    log_likelihoods = []
     for traj_idx in range(len(trajs)):
         traj = trajs[traj_idx]
         traj_embed = traj_embeds[traj_idx]
-        print(len(lang_embeds))
         for i, lang_embed in enumerate(lang_embeds):
-            # Todo: get the feature class name and print the feature values
             nlcomp = nlcomps[i]
-            if nlcomp in classified_nlcomps['gt_reward']:
-                value_func = gt_reward
-                feature_name = "gt_reward"
-            elif nlcomp in classified_nlcomps['speed']:
-                value_func = speed
-                feature_name = "speed"
-            elif nlcomp in classified_nlcomps['height']:
-                value_func = height
-                feature_name = "height"
-            elif nlcomp in classified_nlcomps['distance_to_cube']:
-                value_func = distance_to_cube
-                feature_name = "distance_to_cube"
-            elif nlcomp in classified_nlcomps['distance_to_bottle']:
-                value_func = distance_to_bottle
-                feature_name = "distance_to_bottle"
-            else:
-                raise ValueError(f"NL comparison {nlcomp} not found in classified NL comparisons")
-
-            nearest_traj_idx = get_nearest_embed_distance(traj_embed, lang_embed, traj_embeds, traj_idx)
+            # Get the feature class and values for the trajectories
+            value_func, feature_name = get_feature_class(nlcomp, classified_nlcomps)
+            nearest_traj_idx = get_nearest_embed_cosine(traj_embed, lang_embed, traj_embeds)
             nearest_traj = trajs[nearest_traj_idx]
             traj1_feature_values = [value_func(traj[t]) for t in range(500)]
             traj2_feature_values = [value_func(nearest_traj[t]) for t in range(500)]
+
+            # If the language comparison is greater, then the feature value of traj2 should be greater than traj1
+            # vice versa for less
             if nlcomp in greater_nlcomps:
                 correct += np.mean(traj1_feature_values) <= np.mean(traj2_feature_values)
                 greater = True
@@ -148,9 +133,16 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
                 raise ValueError(f"NL comparison {nlcomp} not found in greater or less NL comparisons")
             total += 1
             if debug:
-                print(f"{nlcomp}, {greater}\n{feature_name}, traj1: {np.mean(traj1_feature_values)}, traj2: {np.mean(traj2_feature_values)}, {correct}")
+                print(
+                    f"{nlcomp}, {greater}\n{feature_name}, traj1: {np.mean(traj1_feature_values)}, traj2: {np.mean(traj2_feature_values)}, {correct}")
 
-    print(f"Correct: {correct}/{total} ({correct / total})")
+            # Get the log probability of the language comparison given the trajectory
+            nearest_traj_embed = traj_embeds[nearest_traj_idx]
+            dot_prod = np.dot(nearest_traj_embed - traj_embed, lang_embed)
+            log_likelihood = np.log(1 / (1 + np.exp(-dot_prod)))
+            log_likelihoods.append(log_likelihood)
+
+    print(f"Correct: {correct}/{total} ({correct / total}), Avg. log likelihood: {np.mean(log_likelihoods)}")
 
 
 if __name__ == '__main__':
