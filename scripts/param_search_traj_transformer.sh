@@ -13,7 +13,7 @@ for num_heads in "${num_heads_values[@]}"; do
         # Run the experiment with the specified parameters
         python -m feature_learning.learn_features --initial-loss-check --data-dir=data/dataset \
             --preprocessed-nlcomps --bert-model=bert-tiny --batch-size=256 \
-            --n-heads=$num_heads --n-layers=$num_layers \
+            --use-traj-transformer --n-heads=$num_heads --n-layers=$num_layers \
             --exp-name=traj-trans-h$num_heads-l$num_layers-lang-linear
     done
 done
