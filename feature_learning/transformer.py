@@ -70,14 +70,11 @@ class TransformerEncoder(nn.Module):
         self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout) for _ in range(nlayers)])
         self.feedforward = FeedForward(d_model, d_ff, dropout)
         self.embed = nn.Linear(input_size, d_model)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
         # self.linear = nn.Linear(d_model, input_size)
 
     def forward(self, x):
         # x has shape (batch_size, sequence length, input_size)
         x = self.embed(x)  # Assuming x is a 2D tensor of shape (sequence_length, input_size)
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)
-        x = torch.cat((cls_token, x), dim=1)
         x = self.pos_encoder(x)
         for layer in self.encoder_layers:
             x = layer(x)
