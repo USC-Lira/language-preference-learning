@@ -145,8 +145,9 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     best_val_acc = 0
     for epoch in range(epochs):
         loss = 0
-        with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
+        with tqdm(total=len(train_loader), unit="batch") as pbar:
             for train_data in train_loader:
+                pbar.set_description(f"Epoch {epoch + 1}/{epochs}")
                 # load it to the active device
                 train_data = {key: value.to(device) for key, value in train_data.items()}
 
@@ -189,6 +190,7 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
                 pbar.set_postfix({"log_likelihood_loss": log_likelihood_loss.item(),
                                   "reconstruction_loss": reconstruction_loss.item(),
                                   "cosine_similarity": cos_sim.item()})
+                pbar.update()
 
         # compute the epoch training loss
         # Note: this is the per-BATCH loss. len(train_loader) gives number of batches.
