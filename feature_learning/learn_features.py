@@ -18,7 +18,7 @@ os.environ["OMP_NUM_THREADS"] = "4"
 
 def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0,
           encoder_hidden_dim=128, decoder_hidden_dim=128, preprocessed_nlcomps=False, initial_loss_check=False,
-          use_bert_encoder=False, finetune_bert=False, use_traj_transformer=True,
+          use_bert_encoder=False, finetune_bert=False, traj_encoder='mlp',
           bert_model='bert-base'):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -41,7 +41,7 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[bert_model],
-                              use_bert_encoder=use_bert_encoder, use_traj_transformer=use_traj_transformer)
+                              use_bert_encoder=use_bert_encoder, traj_encoder=traj_encoder)
 
     if use_bert_encoder:
         if not finetune_bert:
@@ -176,7 +176,7 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
                 log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
 
                 # train_loss = reconstruction_loss + distance_loss
-                train_loss = log_likelihood_loss
+                train_loss = reconstruction_loss + log_likelihood_loss
 
                 # compute accumulated gradients
                 train_loss.backward()
@@ -275,8 +275,8 @@ if __name__ == '__main__':
     parser.add_argument('--model-save-dir', type=str, default='feature_learning/', help='where to save the model')
     parser.add_argument('--bert-model', type=str, default='bert-base', help='which BERT model to use')
     parser.add_argument('--use-bert-encoder', action="store_true", help='whether to use BERT in the language encoder')
-    parser.add_argument('--use-traj-transformer', action="store_true",
-                        help='whether to use transformer as the trajectory encoder')
+    parser.add_argument('--traj-encoder', default='mlp', choices=['mlp', 'transformer', 'lstm'],
+                        help='which trajectory encoder to use')
     parser.add_argument('--n-heads', type=int, default=4, help='number of heads in the multi-head attention')
     parser.add_argument('--n-layers', type=int, default=3, help='number of layers in the trajectory transformer')
 
@@ -296,7 +296,7 @@ if __name__ == '__main__':
                               initial_loss_check=args.initial_loss_check,
                               finetune_bert=args.finetune_bert, bert_model=args.bert_model,
                               use_bert_encoder=args.use_bert_encoder,
-                              use_traj_transformer=args.use_traj_transformer)
+                              traj_encoder=args.traj_encoder)
     else:
         # BERT as the language encoder: two-stage training
         # Stage 1: train the trajectory encoder with BERT frozen
@@ -308,7 +308,7 @@ if __name__ == '__main__':
               initial_loss_check=args.initial_loss_check,
               finetune_bert=False, bert_model=args.bert_model,
               use_bert_encoder=args.use_bert_encoder,
-              use_traj_transformer=args.use_traj_transformer)
+              traj_encoder=args.traj_encoder)
 
         # Stage 2: co-finetune BERT and the trajectory encoder
         logger.info('\n------------------ Co-finetune BERT ------------------')
@@ -319,4 +319,4 @@ if __name__ == '__main__':
               initial_loss_check=args.initial_loss_check,
               finetune_bert=True, bert_model=args.bert_model,
               use_bert_encoder=args.use_bert_encoder,
-              use_traj_transformer=args.use_traj_transformer)
+              traj_encoder=args.traj_encoder)

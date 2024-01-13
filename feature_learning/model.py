@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 
 from feature_learning.transformer import TransformerEncoder
+from feature_learning.lstm import LSTMEncoder
 
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
@@ -24,21 +25,29 @@ class NLTrajEncoder(nn.Module):
 class NLTrajAutoencoder(nn.Module):
     def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
                  bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
-                 use_bert_encoder=False, use_traj_transformer=False):
+                 use_bert_encoder=False, traj_encoder='mlp'):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
-        self.use_traj_transformer = use_traj_transformer
-        if use_traj_transformer:
+        self.traj_encoder_cls = traj_encoder
+        if traj_encoder == 'transformer':
             self.traj_encoder = TransformerEncoder(
                 input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
                 nlayers=3, d_ff=feature_dim, dropout=0.1
             )
-        else:
+        elif traj_encoder == 'mlp':
             self.traj_encoder = nn.Sequential(
                 nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
                 nn.ReLU(),
                 nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
             )
+        elif traj_encoder == 'lstm':
+            self.traj_encoder = LSTMEncoder(
+                state_dim=STATE_DIM, action_dim=ACTION_DIM, hidden_dim=encoder_hidden_dim, output_dim=feature_dim
+            )
+
+        else:
+            raise ValueError(f"Trajectory encoder {traj_encoder} not found")
+
         self.traj_decoder = nn.Sequential(
             nn.Linear(in_features=feature_dim, out_features=decoder_hidden_dim),
             nn.ReLU(),
@@ -68,13 +77,18 @@ class NLTrajAutoencoder(nn.Module):
         encoded_traj_a = self.traj_encoder(traj_a)
         encoded_traj_b = self.traj_encoder(traj_b)
 
-        if self.use_traj_transformer:
+        if self.traj_encoder_cls == 'transformer':
             encoded_traj_a = encoded_traj_a[:, 0, :]
             encoded_traj_b = encoded_traj_b[:, 0, :]
-        else:
+        elif self.traj_encoder_cls == 'lstm':
+            encoded_traj_a = encoded_traj_a
+            encoded_traj_b = encoded_traj_b
+        elif self.traj_encoder_cls == 'mlp':
             # Take the mean over timesteps
             encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
             encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+        else:
+            raise ValueError(f"Trajectory encoder {self.traj_encoder} not found")
 
         # Encode the language
         if self.use_bert_encoder:
