@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from transformers import AutoModel, AutoTokenizer
+from tqdm import tqdm
 
 from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
@@ -144,50 +145,50 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     best_val_acc = 0
     for epoch in range(epochs):
         loss = 0
-        for train_data in train_loader:
-            # load it to the active device
-            train_data = {key: value.to(device) for key, value in train_data.items()}
+        with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
+            for train_data in train_loader:
+                # load it to the active device
+                train_data = {key: value.to(device) for key, value in train_data.items()}
 
-            # reset the gradients back to zero
-            optimizer.zero_grad()
+                # reset the gradients back to zero
+                optimizer.zero_grad()
 
-            # compute reconstructions
-            output = model(train_data)
-            encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = output
+                # compute reconstructions
+                output = model(train_data)
+                encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = output
 
-            # compute training reconstruction loss
-            # MSELoss already takes the mean over the batch.
-            reconstruction_loss = mse(decoded_traj_a, torch.mean(train_data['traj_a'], dim=-2))
-            reconstruction_loss += mse(decoded_traj_b, torch.mean(train_data['traj_b'], dim=-2))
-            # print("reconstruction_loss:", reconstruction_loss.shape)
+                # compute training reconstruction loss
+                # MSELoss already takes the mean over the batch.
+                reconstruction_loss = mse(decoded_traj_a, torch.mean(train_data['traj_a'], dim=-2))
+                reconstruction_loss += mse(decoded_traj_b, torch.mean(train_data['traj_b'], dim=-2))
+                # print("reconstruction_loss:", reconstruction_loss.shape)
 
-            # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
-            cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
-            cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
-            distance_loss = 1 - cos_sim  # Then convert the value to a loss.
-            # print("distance_loss:", distance_loss.shape)
+                # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
+                cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
+                cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
+                distance_loss = 1 - cos_sim  # Then convert the value to a loss.
+                # print("distance_loss:", distance_loss.shape)
 
-            # print("encoded_traj_b - encoded_traj_a:", (encoded_traj_b - encoded_traj_a).detach().cpu().numpy()[0])
-            # print("encoded_lang:", (encoded_lang).detach().cpu().numpy()[0])
-            dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
-            # print("dot_prod:", dot_prod.detach().cpu().numpy()[0])
-            log_likelihood = logsigmoid(dot_prod)
-            log_likelihood = torch.mean(log_likelihood)  # Take the mean over the batch.
-            log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
+                dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
+                log_likelihood = logsigmoid(dot_prod)
+                log_likelihood = torch.mean(log_likelihood)  # Take the mean over the batch.
+                log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
 
-            # By now, train_loss is a scalar.
-            # train_loss = reconstruction_loss + distance_loss
-            train_loss = reconstruction_loss + log_likelihood_loss
-            # print("train_loss:", train_loss.shape)
+                # train_loss = reconstruction_loss + distance_loss
+                train_loss = log_likelihood_loss
 
-            # compute accumulated gradients
-            train_loss.backward()
+                # compute accumulated gradients
+                train_loss.backward()
 
-            # perform parameter update based on current gradients
-            optimizer.step()
+                # perform parameter update based on current gradients
+                optimizer.step()
 
-            # add the mini-batch training loss to epoch loss
-            loss += train_loss.item()
+                # add the mini-batch training loss to epoch loss
+                loss += train_loss.item()
+
+                pbar.set_postfix({"log_likelihood_loss": log_likelihood_loss.item(),
+                                  "reconstruction_loss": reconstruction_loss.item(),
+                                  "cosine_similarity": cos_sim.item()})
 
         # compute the epoch training loss
         # Note: this is the per-BATCH loss. len(train_loader) gives number of batches.

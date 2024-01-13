@@ -67,9 +67,14 @@ class NLTrajAutoencoder(nn.Module):
         # Encode trajectories
         encoded_traj_a = self.traj_encoder(traj_a)
         encoded_traj_b = self.traj_encoder(traj_b)
-        # Take the mean over timesteps
-        encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
-        encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+
+        if self.use_traj_transformer:
+            encoded_traj_a = encoded_traj_a[:, 0, :]
+            encoded_traj_b = encoded_traj_b[:, 0, :]
+        else:
+            # Take the mean over timesteps
+            encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
+            encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
 
         # Encode the language
         if self.use_bert_encoder:
