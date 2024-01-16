@@ -24,14 +24,14 @@ class NLTrajEncoder(nn.Module):
 class NLTrajAutoencoder(nn.Module):
     def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
                  bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
-                 use_bert_encoder=False, use_traj_transformer=False):
+                 use_bert_encoder=False, use_traj_transformer=False, num_heads=4, num_layers=3):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
         self.use_traj_transformer = use_traj_transformer
         if use_traj_transformer:
             self.traj_encoder = TransformerEncoder(
-                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
-                nlayers=3, d_ff=feature_dim, dropout=0.1
+                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=num_heads, d_hid=encoder_hidden_dim,
+                nlayers=num_layers, d_ff=feature_dim, dropout=0.1
             )
         else:
             self.traj_encoder = nn.Sequential(

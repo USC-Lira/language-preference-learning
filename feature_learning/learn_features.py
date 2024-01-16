@@ -18,7 +18,7 @@ os.environ["OMP_NUM_THREADS"] = "4"
 def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e-3, weight_decay=0,
           encoder_hidden_dim=128, decoder_hidden_dim=128, preprocessed_nlcomps=False, initial_loss_check=False,
           use_bert_encoder=False, finetune_bert=False, use_traj_transformer=True,
-          bert_model='bert-base'):
+          bert_model='bert-base', num_heads=4, num_layers=3):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -40,7 +40,7 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[bert_model],
-                              use_bert_encoder=use_bert_encoder, use_traj_transformer=use_traj_transformer)
+                              use_bert_encoder=use_bert_encoder, use_traj_transformer=use_traj_transformer, num_heads=num_heads, num_layers=num_layers)
 
     if use_bert_encoder:
         if not finetune_bert:
@@ -293,7 +293,9 @@ if __name__ == '__main__':
                               initial_loss_check=args.initial_loss_check,
                               finetune_bert=args.finetune_bert, bert_model=args.bert_model,
                               use_bert_encoder=args.use_bert_encoder,
-                              use_traj_transformer=args.use_traj_transformer)
+                              use_traj_transformer=args.use_traj_transformer,
+                              num_heads=args.n_heads,
+                              num_layers=args.n_layers)
     else:
         # BERT as the language encoder: two-stage training
         # Stage 1: train the trajectory encoder with BERT frozen
@@ -305,7 +307,9 @@ if __name__ == '__main__':
               initial_loss_check=args.initial_loss_check,
               finetune_bert=False, bert_model=args.bert_model,
               use_bert_encoder=args.use_bert_encoder,
-              use_traj_transformer=args.use_traj_transformer)
+              use_traj_transformer=args.use_traj_transformer,
+              num_heads=args.n_heads,
+              num_layers=args.n_layers)
 
         # Stage 2: co-finetune BERT and the trajectory encoder
         logger.info('\n------------------ Co-finetune BERT ------------------')
@@ -316,4 +320,6 @@ if __name__ == '__main__':
               initial_loss_check=args.initial_loss_check,
               finetune_bert=True, bert_model=args.bert_model,
               use_bert_encoder=args.use_bert_encoder,
-              use_traj_transformer=args.use_traj_transformer)
+              use_traj_transformer=args.use_traj_transformer,
+              num_heads=args.n_heads,
+              num_layers=args.n_layers)
