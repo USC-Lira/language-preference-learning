@@ -32,7 +32,14 @@ def get_feature_value(traj):
 
 
 def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds):
-    idx = np.argmax(lang_embeds @ (optimal_traj_embed - curr_traj_embed))
+    cos_sim = np.dot(lang_embeds, optimal_traj_embed - curr_traj_embed) / (
+                np.linalg.norm(lang_embeds, axis=1) * np.linalg.norm(optimal_traj_embed - curr_traj_embed))
+    cos_sim = torch.from_numpy(cos_sim)
+    probs = torch.softmax(cos_sim, dim=0)
+    # add some noise to the probabilities
+    probs = probs + torch.randn_like(probs) * 1e-5
+    # sample a language comparison with the probabilities
+    idx = torch.multinomial(probs, 1).item()
     return lang_embeds[idx], idx
 
 
