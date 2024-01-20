@@ -31,15 +31,19 @@ def get_feature_value(traj):
     return np.mean(feature_values, axis=0)
 
 
-def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds):
-    cos_sim = np.dot(lang_embeds, optimal_traj_embed - curr_traj_embed) / (
+def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds, softmax=False):
+    if softmax:
+        cos_sim = np.dot(lang_embeds, optimal_traj_embed - curr_traj_embed) / (
                 np.linalg.norm(lang_embeds, axis=1) * np.linalg.norm(optimal_traj_embed - curr_traj_embed))
-    cos_sim = torch.from_numpy(cos_sim)
-    probs = torch.softmax(cos_sim, dim=0)
-    # add some noise to the probabilities
-    probs = probs + torch.randn_like(probs) * 1e-5
-    # sample a language comparison with the probabilities
-    idx = torch.multinomial(probs, 1).item()
+        cos_sim = torch.from_numpy(cos_sim)
+        probs = torch.softmax(cos_sim, dim=0)
+        # add some noise to the probabilities
+        probs = probs + torch.randn_like(probs) * 1e-5
+        # sample a language comparison with the probabilities
+        idx = torch.multinomial(probs, 1).item()
+    else:
+        dot_product = np.dot(lang_embeds, optimal_traj_embed - curr_traj_embed)
+        idx = np.argmax(dot_product)
     return lang_embeds[idx], idx
 
 
@@ -150,12 +154,13 @@ if __name__ == '__main__':
     all_traj_values = []
     for _ in range(100):
         optimal_reached, optimal_traj_value, traj_values = improve_trajectory(args)
-        print(len(traj_values))
         optimal_traj_values.append(optimal_traj_value)
         all_traj_values.append(traj_values)
 
     all_traj_values = np.array(all_traj_values)
-    print(all_traj_values.shape)
+    np.save('model_analysis/all_traj_values_argmax.npy', all_traj_values)
+    optimal_traj_values = np.array(optimal_traj_values)
+    np.save('model_analysis/optimal_traj_values_argmax.npy', optimal_traj_values)
     plt.plot(np.mean(all_traj_values, axis=0), label='Current Trajectory')
     # Draw optimal trajecotry values as a dashed horizontal line
     plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
