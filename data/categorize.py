@@ -15,8 +15,20 @@ classified = {
     "distance_to_bottle": [],
 }
 
-greater = []
-less = []
+greater = {
+    "gt_reward": [],
+    "speed": [],
+    "height": [],
+    "distance_to_cube": [],
+    "distance_to_bottle": [],
+}
+less = {
+    "gt_reward": [],
+    "speed": [],
+    "height": [],
+    "distance_to_cube": [],
+    "distance_to_bottle": [],
+}
 
 greater_adjs = greater_speed_adjs + greater_speed_adjs_val + greater_height_adjs + greater_height_adjs_val + greater_gtreward_adjs + greater_gtreward_adjs_val + greater_distance_adjs + greater_distance_adjs_val
 less_adjs = less_speed_adjs + less_speed_adjs_val + less_height_adjs + less_height_adjs_val + less_gtreward_adjs + less_gtreward_adjs_val + less_distance_adjs + less_distance_adjs_val
@@ -29,28 +41,28 @@ for i in range(len(a)):
         flag = True
         for adj in greater_adjs:
             if adj in original_sentence:
-                greater.extend(a[i])
+                greater["gt_reward"].extend(a[i])
         for adj in less_adjs:
             if adj in original_sentence:
-                less.extend(a[i])
+                less["gt_reward"].extend(a[i])
     elif "bottle" in original_sentence:
         classified["distance_to_bottle"].extend(a[i])
         flag = True
         for adj in greater_adjs:
             if adj in original_sentence:
-                greater.extend(a[i])
+                greater["distance_to_bottle"].extend(a[i])
         for adj in less_adjs:
             if adj in original_sentence:
-                less.extend(a[i])
+                less["distance_to_bottle"].extend(a[i])
     elif "cube" in original_sentence:
         classified["distance_to_cube"].extend(a[i])
         flag = True
         for adj in greater_adjs:
             if adj in original_sentence:
-                greater.extend(a[i])
+                greater["distance_to_cube"].extend(a[i])
         for adj in less_adjs:
             if adj in original_sentence:
-                less.extend(a[i])
+                less["distance_to_cube"].extend(a[i])
     else:
         for adj in greater_speed_adjs + greater_speed_adjs_val + less_speed_adjs + less_speed_adjs_val:
             if adj in original_sentence:
@@ -58,20 +70,20 @@ for i in range(len(a)):
                 flag = True
                 for adj_2 in greater_adjs:
                     if adj_2 in original_sentence:
-                        greater.extend(a[i])
+                        greater["speed"].extend(a[i])
                 for adj_2 in less_adjs:
                     if adj_2 in original_sentence:
-                        less.extend(a[i])
+                        less["speed"].extend(a[i])
         for adj in greater_height_adjs + greater_height_adjs_val + less_height_adjs + less_height_adjs_val:
             if adj in original_sentence:
                 classified["height"].extend(a[i])
                 flag = True
                 for adj_2 in greater_adjs:
                     if adj_2 in original_sentence:
-                        greater.extend(a[i])
+                        greater["height"].extend(a[i])
                 for adj_2 in less_adjs:
                     if adj_2 in original_sentence:
-                        less.extend(a[i])
+                        less["height"].extend(a[i])
     if not flag:
         print(original_sentence)
 

@@ -11,26 +11,9 @@ from utils import generate_synthetic_comparisons_commands, generate_noisyaugment
 def get_comparisons(traj_i, traj_j, noise_augmentation=0, aug_comps=None, validation=False):
     if noise_augmentation == 0:
         comps = generate_synthetic_comparisons_commands(traj_i, traj_j, augmented_comps=aug_comps, validation=validation)
-        # gt_reward_comps = generate_synthetic_comparisons_commands(traj_i, traj_j, 'gt_reward', augmented_comps=aug_comps)
-        # speed_comps = generate_synthetic_comparisons_commands(traj_i, traj_j, 'speed', augmented_comps=aug_comps)
-        # height_comps = generate_synthetic_comparisons_commands(traj_i, traj_j, 'height', augmented_comps=aug_comps)
-        # distance_to_bottle_comps = generate_synthetic_comparisons_commands(traj_i, traj_j, 'distance_to_bottle',
-        #                                                                    augmented_comps=aug_comps)
-        # distance_to_cube_comps = generate_synthetic_comparisons_commands(traj_i, traj_j, 'distance_to_cube',
-        #                                                                  augmented_comps=aug_comps)
     else:
         comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, n_duplicates=noise_augmentation,
                                                                        augmented_comps=aug_comps, validation=validation)
-        # gt_reward_comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, 'gt_reward', n_duplicates=noise_augmentation,
-        #                                                                          augmented_comps=aug_comps)
-        # speed_comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, 'speed', n_duplicates=noise_augmentation,
-        #                                                                      augmented_comps=aug_comps)
-        # height_comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, 'height', n_duplicates=noise_augmentation,
-        #                                                                       augmented_comps=aug_comps)
-        # distance_to_bottle_comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, 'distance_to_bottle', n_duplicates=noise_augmentation,
-        #                                                                                   augmented_comps=aug_comps)
-        # distance_to_cube_comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, 'distance_to_cube', n_duplicates=noise_augmentation,
-        #                                                                                 augmented_comps=aug_comps)
 
     return comps
 
@@ -48,7 +31,7 @@ def generate_dataset(trajs, noise_augmentation=0, id_mapping=False, all_pairs=Tr
 
     augmented_comps_mapping = None
     if lang_aug:
-        augmented_comps_file = '/data/GPT_augmented_dataset.json'
+        augmented_comps_file = 'data/GPT_augmented_dataset.json'
         with open(augmented_comps_file, 'r') as f:
             augmented_data = json.load(f)
 
@@ -231,8 +214,8 @@ if __name__ == '__main__':
     # print("COMPILING DATASET:")
 
     data_dir = '/home/resl/language-preference-learning/data'
-    train_trajectories = np.load(os.path.join(data_dir, 'train/trajs.npy'))
-    val_trajectories = np.load(os.path.join(data_dir, 'val/trajs.npy'))
+    train_trajectories = np.load(os.path.join(data_dir, '../dataset/train/trajs.npy'))
+    val_trajectories = np.load(os.path.join(data_dir, 'dataset/val/trajs.npy'))
 
     train_traj_as, train_traj_bs, train_comps = generate_dataset(train_trajectories,
                                                                  noise_augmentation=noise_augmentation,
@@ -241,17 +224,17 @@ if __name__ == '__main__':
                                                                  dataset_size=dataset_size,
                                                                  lang_aug=True)
     if id_mapping:
-        train_output_dir = os.path.join(output_dir, 'train')
+        train_output_dir = os.path.join(output_dir, 'dataset/train')
         if not os.path.isdir(train_output_dir):
             os.makedirs(train_output_dir)
         print("SAVING TO:", train_output_dir)
-        np.save(os.path.join(output_dir, 'train/traj_a_indexes.npy'), train_traj_as)
-        np.save(os.path.join(output_dir, 'train/traj_b_indexes.npy'), train_traj_bs)
+        np.save(os.path.join(output_dir, 'dataset/train/traj_a_indexes.npy'), train_traj_as)
+        np.save(os.path.join(output_dir, 'dataset/train/traj_b_indexes.npy'), train_traj_bs)
         # np.save(os.path.join(output_dir, 'train/trajs.npy'), train_trajectories)
         # NOT_TODO: save trajectory rewards too.
         # NOTE: No longer any need to save trajectory rewards, since trajectories contain all info to reconstruct
         # ground truth reward (using robosuite.environments.manipulation.lift_features.gt_reward).
-        with open(os.path.join(output_dir, 'train/nlcomps.json'), 'w') as f:
+        with open(os.path.join(output_dir, 'dataset/train/nlcomps.json'), 'w') as f:
             json.dump(train_comps, f)
 
     val_traj_as, val_traj_bs, val_comps = generate_dataset(val_trajectories,
@@ -259,20 +242,20 @@ if __name__ == '__main__':
                                                            validation=True)
 
     if id_mapping:
-        val_output_dir = os.path.join(output_dir, 'val')
+        val_output_dir = os.path.join(output_dir, 'dataset/val')
         if not os.path.isdir(val_output_dir):
             os.makedirs(val_output_dir)
         print("SAVING TO:", val_output_dir)
-        np.save(os.path.join(output_dir, 'val/traj_a_indexes.npy'), val_traj_as)
-        np.save(os.path.join(output_dir, 'val/traj_b_indexes.npy'), val_traj_bs)
+        np.save(os.path.join(output_dir, 'dataset/val/traj_a_indexes.npy'), val_traj_as)
+        np.save(os.path.join(output_dir, 'dataset/val/traj_b_indexes.npy'), val_traj_bs)
         # np.save(os.path.join(output_dir, 'val/trajs.npy'), val_trajectories)
-        with open(os.path.join(output_dir, 'val/nlcomps.json'), 'w') as f:
+        with open(os.path.join(output_dir, 'dataset/val/nlcomps.json'), 'w') as f:
             json.dump(val_comps, f)
         # if has_video_ids:
         #     np.save(os.path.join(output_dir, 'train/traj_video_ids.npy'), train_trajectory_video_ids)
         #     np.save(os.path.join(output_dir, 'val/traj_video_ids.npy'), val_trajectory_video_ids)
     else:
-        np.save(os.path.join(output_dir, 'val/traj_as.npy'), val_traj_as)
-        np.save(os.path.join(output_dir, 'val/traj_bs.npy'), val_traj_bs)
-        with open(os.path.join(output_dir, 'val/nlcomps.json'), 'w') as f:
+        np.save(os.path.join(output_dir, 'dataset/val/traj_as.npy'), val_traj_as)
+        np.save(os.path.join(output_dir, 'dataset/val/traj_bs.npy'), val_traj_bs)
+        with open(os.path.join(output_dir, 'dataset/val/nlcomps.json'), 'w') as f:
             json.dump(val_comps, f)
