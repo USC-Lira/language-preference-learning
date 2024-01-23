@@ -61,13 +61,23 @@ class NLTrajAutoencoder(nn.Module):
     # Input is a tuple with (trajectory_a, trajectory_b, language)
     # traj_a has shape (n_trajs, n_timesteps, state+action)
     def forward(self, inputs):
+        # NOTE: traj_a is the reference, traj_b is the updated
         traj_a = inputs['traj_a']
         traj_b = inputs['traj_b']
 
         # Encode trajectories
         encoded_traj_a = self.traj_encoder(traj_a)
         encoded_traj_b = self.traj_encoder(traj_b)
-        # Take the mean over timesteps
+
+        # Reshape to (batch_size * trajectory length, feature_dim)
+        decoded_traj_a = self.traj_decoder(encoded_traj_a.reshape(-1, encoded_traj_a.shape[-1]))
+        decoded_traj_b = self.traj_decoder(encoded_traj_b.reshape(-1, encoded_traj_b.shape[-1]))
+
+        # Reshape back to (batch_size, trajectory length, state+action)
+        decoded_traj_a_full = decoded_traj_a.reshape(traj_a.shape[0], traj_a.shape[1], -1)
+        decoded_traj_b_full = decoded_traj_b.reshape(traj_b.shape[0], traj_b.shape[1], -1)
+
+        # Take the mean over timesteps as the trajectory encoding
         encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
         encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
 
@@ -81,9 +91,6 @@ class NLTrajAutoencoder(nn.Module):
         else:
             lang_embeds = inputs['nlcomp']
             encoded_lang = self.lang_encoder(lang_embeds)
-        # NOTE: traj_a is the reference, traj_b is the updated
-        decoded_traj_a = self.traj_decoder(encoded_traj_a)
-        decoded_traj_b = self.traj_decoder(encoded_traj_b)
 
-        output = (encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b)
+        output = (encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a_full, decoded_traj_b_full)
         return output
