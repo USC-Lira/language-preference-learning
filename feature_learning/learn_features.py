@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from transformers import AutoModel, AutoTokenizer
+from tqdm import tqdm
 
 from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
@@ -129,61 +130,67 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     best_val_acc = 0
     for epoch in range(epochs):
         loss = 0
-        for train_datapoint in train_loader:
-            traj_a, traj_b, lang_tokens, lang_attention_maks = train_datapoint
+        with tqdm(total=len(train_loader), unit='batch') as pbar:
+            for train_datapoint in train_loader:
+                pbar.set_description(f"Epoch {epoch + 1}/{epochs}")
+                traj_a, traj_b, lang_tokens, lang_attention_maks = train_datapoint
 
-            # load it to the active device
-            # also cast down (from float64 in np) to float32, since PyTorch's matrices are float32.
-            traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
-            traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
-            lang_tokens = torch.as_tensor(lang_tokens, dtype=torch.long, device=device)
-            lang_attention_maks = torch.as_tensor(lang_attention_maks, dtype=torch.long, device=device)
-            # lang = torch.as_tensor(lang, device=device)
+                # load it to the active device
+                # also cast down (from float64 in np) to float32, since PyTorch's matrices are float32.
+                traj_a = torch.as_tensor(traj_a, dtype=torch.float32, device=device)
+                traj_b = torch.as_tensor(traj_b, dtype=torch.float32, device=device)
+                lang_tokens = torch.as_tensor(lang_tokens, dtype=torch.long, device=device)
+                lang_attention_maks = torch.as_tensor(lang_attention_maks, dtype=torch.long, device=device)
+                # lang = torch.as_tensor(lang, device=device)
 
-            # train_datapoint = train_datapoint.to(device)  # Shouldn't be needed, since already on device
-            train_datapoint = (traj_a, traj_b, lang_tokens, lang_attention_maks)
+                # train_datapoint = train_datapoint.to(device)  # Shouldn't be needed, since already on device
+                train_datapoint = (traj_a, traj_b, lang_tokens, lang_attention_maks)
 
-            # reset the gradients back to zero
-            optimizer.zero_grad()
+                # reset the gradients back to zero
+                optimizer.zero_grad()
 
-            # compute reconstructions
-            output = model(train_datapoint)
-            encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = output
+                # compute reconstructions
+                output = model(train_datapoint)
+                encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = output
 
-            # compute training reconstruction loss
-            # MSELoss already takes the mean over the batch.
-            reconstruction_loss = mse(decoded_traj_a, torch.mean(traj_a, dim=-2)) + mse(decoded_traj_b,
-                                                                                        torch.mean(traj_b, dim=-2))
-            # print("reconstruction_loss:", reconstruction_loss.shape)
+                # compute training reconstruction loss
+                # MSELoss already takes the mean over the batch.
+                reconstruction_loss = mse(decoded_traj_a, torch.mean(traj_a, dim=-2)) + mse(decoded_traj_b,
+                                                                                            torch.mean(traj_b, dim=-2))
+                # print("reconstruction_loss:", reconstruction_loss.shape)
 
-            # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
-            cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
-            cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
-            distance_loss = 1 - cos_sim  # Then convert the value to a loss.
-            # print("distance_loss:", distance_loss.shape)
+                # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
+                cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
+                cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
+                distance_loss = 1 - cos_sim  # Then convert the value to a loss.
+                # print("distance_loss:", distance_loss.shape)
 
-            # print("encoded_traj_b - encoded_traj_a:", (encoded_traj_b - encoded_traj_a).detach().cpu().numpy()[0])
-            # print("encoded_lang:", (encoded_lang).detach().cpu().numpy()[0])
-            dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
-            # print("dot_prod:", dot_prod.detach().cpu().numpy()[0])
-            log_likelihood = logsigmoid(dot_prod)
-            log_likelihood = torch.mean(log_likelihood)  # Take the mean over the batch.
-            log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
+                # print("encoded_traj_b - encoded_traj_a:", (encoded_traj_b - encoded_traj_a).detach().cpu().numpy()[0])
+                # print("encoded_lang:", (encoded_lang).detach().cpu().numpy()[0])
+                dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
+                # print("dot_prod:", dot_prod.detach().cpu().numpy()[0])
+                log_likelihood = logsigmoid(dot_prod)
+                log_likelihood = torch.mean(log_likelihood)  # Take the mean over the batch.
+                log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
 
-            # By now, train_loss is a scalar.
-            # train_loss = reconstruction_loss + distance_loss
-            train_loss = reconstruction_loss + log_likelihood_loss
-            # print("train_loss:", train_loss.shape)
+                # By now, train_loss is a scalar.
+                # train_loss = reconstruction_loss + distance_loss
+                train_loss = reconstruction_loss + log_likelihood_loss
+                # print("train_loss:", train_loss.shape)
 
-            # compute accumulated gradients
-            train_loss.backward()
+                # compute accumulated gradients
+                train_loss.backward()
 
-            # perform parameter update based on current gradients
-            optimizer.step()
+                # perform parameter update based on current gradients
+                optimizer.step()
 
-            # add the mini-batch training loss to epoch loss
-            loss += train_loss.item()
-            break
+                # add the mini-batch training loss to epoch loss
+                loss += train_loss.item()
+
+                pbar.set_postfix({"log_likelihood_loss": log_likelihood_loss.item(),
+                                  "reconstruction_loss": reconstruction_loss.item(),
+                                  "cosine_similarity": cos_sim.item()})
+                pbar.update()
 
         # compute the epoch training loss
         # Note: this is the per-BATCH loss. len(train_loader) gives number of batches.
@@ -222,7 +229,6 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
 
                 val_loss += (reconstruction_loss + log_likelihood_loss).item()
                 num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
-                break
 
         val_loss /= len(val_loader)
         val_reconstruction_loss /= len(val_loader)
