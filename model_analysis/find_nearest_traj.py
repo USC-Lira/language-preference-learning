@@ -62,7 +62,7 @@ def get_feature_class(nlcomp, classified_nlcomps):
 
 
 def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hidden_dim, preprocessed_nlcomps,
-         old_model=False, debug=False):
+         old_model=False, use_traj_transformer=False, debug=False):
     # Load the val trajectories and language comparisons first
     trajs = np.load('data/dataset/val/trajs.npy')
     nlcomps = json.load(open(f'data/dataset/val/unique_nlcomps_{bert_model}.json', 'rb'))
@@ -84,7 +84,7 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[bert_model],
-                              use_bert_encoder=use_bert_encoder)
+                              use_bert_encoder=use_bert_encoder, use_traj_transformer=use_traj_transformer)
 
     state_dict = torch.load(os.path.join(model_dir, 'best_model_state_dict.pth'))
 
@@ -156,4 +156,4 @@ if __name__ == '__main__':
     parser.add_argument('--old-model', action='store_true')
     args = parser.parse_args()
     main(args.model_dir, args.use_bert_encoder, args.bert_model, args.encoder_hidden_dim, args.decoder_hidden_dim,
-         args.preprocessed_nlcomps, args.old_model)
+         args.preprocessed_nlcomps, args.old_model, use_traj_transformer=False)

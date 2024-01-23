@@ -10,7 +10,7 @@ from feature_learning.utils import BERT_MODEL_NAME, BERT_OUTPUT_DIM
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from model_analysis.find_nearest_traj import get_nearest_embed_cosine
 from feature_learning.model import NLTrajAutoencoder
-from model_analysis.utils import get_traj_lang_embeds
+from model_analysis.utils import get_traj_lang_embeds, get_lang_embed
 
 
 def initialize_reward(num_features):
@@ -47,10 +47,33 @@ def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds, softmax=Fals
     return lang_embeds[idx], idx
 
 
+def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, reward_function, less_feature_idx,
+                      greater_nlcomps, less_nlcomps, softmax=False):
+    # Based on the reward function, determine which feature aspect to improve
+    feature_diff = optimal_traj_feature_value - curr_traj_feature_value
+    reward_diff = np.multiply(feature_diff, reward_function)
+    if softmax:
+        feature_probs = torch.softmax(torch.from_numpy(reward_diff), dim=0)
+        feature_aspect = torch.multinomial(feature_probs, 1).item()
+    else:
+        feature_aspect = np.argmax(np.abs(reward_diff))
+
+    feature_names = ["gt_reward", "speed", "height", "distance_to_cube", "distance_to_bottle"]
+    if feature_aspect in less_feature_idx:
+        # If the feature aspect is less than the optimal trajectory, then the language comparison should be greater
+        nlcomp = np.random.choice(less_nlcomps[feature_names[feature_aspect]])
+    else:
+        # If the feature aspect is greater than the optimal trajectory, then the language comparison should be less
+        nlcomp = np.random.choice(greater_nlcomps[feature_names[feature_aspect]])
+    return nlcomp
+
+
 def improve_trajectory(args):
     trajs = np.load('data/dataset/val/trajs.npy')
     nlcomps = json.load(open(f'data/dataset/val/unique_nlcomps_{args.bert_model}.json', 'rb'))
     nlcomps_bert_embeds = np.load(f'data/dataset/val/unique_nlcomps_{args.bert_model}.npy')
+    greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
+    less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
 
     # Load the model
     if args.use_bert_encoder:
@@ -58,8 +81,8 @@ def improve_trajectory(args):
         tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
         feature_dim = BERT_OUTPUT_DIM[args.bert_model]
     else:
-        lang_encoder = None
-        tokenizer = None
+        lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
+        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
         feature_dim = 16
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
@@ -87,6 +110,31 @@ def improve_trajectory(args):
     # Get embeddings for the trajectories and language comparisons
     traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
                                                     nlcomps_bert_embeds)
+
+    # Get BERT embeddings for the language comparisons in greater_nlcomps and less_nlcomps
+    greater_nlcomps_bert_embeds = {}
+    less_nlcomps_bert_embeds = {}
+    # for feature_name in greater_nlcomps:
+    #     greater_nlcomps_bert_embeds[feature_name] = []
+    #     for nlcomp in greater_nlcomps[feature_name]:
+    #         inputs = tokenizer(nlcomp, return_tensors="pt")
+    #         bert_output = lang_encoder(**inputs)
+    #         embedding = bert_output.last_hidden_state
+    #
+    #         # Average across the sequence to get a sentence-level embedding
+    #         embedding = torch.mean(embedding, dim=1, keepdim=False)
+    #         greater_nlcomps_bert_embeds[feature_name].append(embedding.detach().cpu().numpy())
+    #
+    # for feature_name in less_nlcomps:
+    #     less_nlcomps_bert_embeds[feature_name] = []
+    #     for nlcomp in less_nlcomps[feature_name]:
+    #         inputs = tokenizer(nlcomp, return_tensors="pt")
+    #         bert_output = lang_encoder(**inputs)
+    #         embedding = bert_output.last_hidden_state
+    #
+    #         # Average across the sequence to get a sentence-level embedding
+    #         embedding = torch.mean(embedding, dim=1, keepdim=False)
+    #         less_nlcomps_bert_embeds[feature_name].append(embedding.detach().cpu().numpy())
 
     # Randomly initialize a reward function
     reward_func = initialize_reward(5)
@@ -120,8 +168,11 @@ def improve_trajectory(args):
             break
 
         # Find the nearest language embedding to the optimal trajectory embedding
-        lang_embed, lang_idx = get_best_lang(traj_embeds[optimal_traj_idx], traj_embeds[curr_traj_idx], lang_embeds)
-        nlcomp = nlcomps[lang_idx]
+        # lang_embed, lang_idx = get_best_lang(traj_embeds[optimal_traj_idx], traj_embeds[curr_traj_idx], lang_embeds)
+        # nlcomp = nlcomps[lang_idx]
+        nlcomp = get_lang_feedback(feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func, less_idx,
+                                   greater_nlcomps, less_nlcomps, softmax=True)
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=True, bert_model=lang_encoder)
         next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds)
         next_traj_value = reward_values[next_traj_idx]
         traj_values.append(next_traj_value)
@@ -156,11 +207,12 @@ if __name__ == '__main__':
         optimal_reached, optimal_traj_value, traj_values = improve_trajectory(args)
         optimal_traj_values.append(optimal_traj_value)
         all_traj_values.append(traj_values)
+        print(len(all_traj_values))
 
     all_traj_values = np.array(all_traj_values)
-    np.save('model_analysis/all_traj_values_argmax.npy', all_traj_values)
+    np.save('model_analysis/all_traj_values_softmax.npy', all_traj_values)
     optimal_traj_values = np.array(optimal_traj_values)
-    np.save('model_analysis/optimal_traj_values_argmax.npy', optimal_traj_values)
+    np.save('model_analysis/optimal_traj_values_softmax.npy', optimal_traj_values)
     plt.plot(np.mean(all_traj_values, axis=0), label='Current Trajectory')
     # Draw optimal trajecotry values as a dashed horizontal line
     plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
