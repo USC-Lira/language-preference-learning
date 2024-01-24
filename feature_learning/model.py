@@ -78,8 +78,8 @@ class NLTrajAutoencoder(nn.Module):
         encoded_traj_b = self.traj_encoder(traj_b)
 
         if self.traj_encoder_cls == 'transformer':
-            encoded_traj_a = encoded_traj_a[:, 0, :]
-            encoded_traj_b = encoded_traj_b[:, 0, :]
+            encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
+            encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
         elif self.traj_encoder_cls == 'lstm':
             encoded_traj_a = encoded_traj_a
             encoded_traj_b = encoded_traj_b
@@ -100,6 +100,7 @@ class NLTrajAutoencoder(nn.Module):
         else:
             lang_embeds = inputs['nlcomp']
             encoded_lang = self.lang_encoder(lang_embeds)
+
         # NOTE: traj_a is the reference, traj_b is the updated
         decoded_traj_a = self.traj_decoder(encoded_traj_a)
         decoded_traj_b = self.traj_decoder(encoded_traj_b)

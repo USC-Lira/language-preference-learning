@@ -45,44 +45,73 @@ class MultiheadAttention(nn.Module):
 class EncoderLayer(nn.Module):
     def __init__(self, d_model=512, num_heads=8, dff=2048, dropout=0.0, norm_layer=True):
         super(EncoderLayer, self).__init__()
-        self.norm_layer = nn.LayerNorm(d_model, eps=1e-6)
+        self.layernorm1 = nn.LayerNorm(d_model, eps=1e-6)
         self.multi_head_attention = MultiheadAttention(d_model, num_heads, dropout)
         self.dropout_attention = nn.Dropout(dropout)
+        self.layernorm2 = nn.LayerNorm(d_model, eps=1e-6)
         self.feedforward = FeedForward(d_model, dff, dropout)
         self.dropout_ff = nn.Dropout(dropout)
 
     def forward(self, inputs, mask=None):
         x = inputs
         # Put normalization layer inside residual connection according to https://arxiv.org/pdf/2002.04745.pdf
-        attention_output = self.multi_head_attention(self.norm_layer(x), mask=mask)
+        x = self.layernorm1(x)
+        attention_output = self.multi_head_attention(x, mask=mask)
         x = x + self.dropout_attention(attention_output)
 
-        feedforward_output = self.feedforward(self.norm_layer(x))
+        x = self.layernorm2(x)
+        feedforward_output = self.feedforward(x)
         x = x + self.dropout_ff(feedforward_output)
 
         return x
+
+
+class TokenLearner(nn.Module):
+    def __init__(self, token_dim, num_selected_tokens):
+        super().__init__()
+        self.token_dim = token_dim
+        self.num_selected_tokens = num_selected_tokens
+        # Token selection network
+        self.selection_net = nn.Sequential(
+            nn.Linear(token_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_selected_tokens)
+        )
+        self.layernorm = nn.LayerNorm(token_dim, eps=1e-6)
+
+
+    def forward(self, x):
+        # x has shape (batch_size, sequence length, token_dim)
+
+        token_importance = self.selection_net(x)
+        token_importance = F.softmax(token_importance, dim=1)
+
+        # Select tokens
+        selected_tokens = torch.bmm(token_importance.transpose(1, 2), x)
+
+        return selected_tokens
 
 
 class TransformerEncoder(nn.Module):
     def __init__(self, input_size, d_model, nhead, d_hid, nlayers, d_ff, dropout=0.5):
         super().__init__()
         self.pos_encoder = PositionalEncoding(d_model)
+        self.tokenlearner = TokenLearner(token_dim=d_model, num_selected_tokens=50)
         self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout) for _ in range(nlayers)])
         self.feedforward = FeedForward(d_model, d_ff, dropout)
         self.embed = nn.Linear(input_size, d_model)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
-        # self.linear = nn.Linear(d_model, input_size)
+        # self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
 
     def forward(self, x):
         # x has shape (batch_size, sequence length, input_size)
         x = self.embed(x)
+        x = self.tokenlearner(x)
         # Add the CLS token
-        cls_token = self.cls_token.repeat(x.shape[0], 1, 1)
-        x = torch.cat((cls_token, x), dim=1)
+        # cls_token = self.cls_token.repeat(x.shape[0], 1, 1)
+        # x = torch.cat((cls_token, x), dim=1)
         x = self.pos_encoder(x)
         for layer in self.encoder_layers:
             x = layer(x)
 
         x = self.feedforward(x)
-        # x = self.linear(x)
         return x

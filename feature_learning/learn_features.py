@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.model import NLTrajAutoencoder
-from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM, create_logger
+from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM, create_logger, AverageMeter
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["OMP_NUM_THREADS"] = "4"
@@ -63,7 +63,6 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     model.to(device)
 
     # mean-squared error loss
-    mse = nn.MSELoss()
     logsigmoid = nn.LogSigmoid()
 
     logger.info("Loading dataset...")
@@ -121,8 +120,8 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
                 pred = model(val_data)
 
                 encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
-                reconstruction_loss = mse(decoded_traj_a, torch.mean(val_data['traj_a'], dim=-2)) \
-                                      + mse(decoded_traj_b, torch.mean(val_data['traj_b'], dim=-2))
+                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(val_data['traj_a'], dim=-2)) + \
+                                      F.mse_loss(decoded_traj_b, torch.mean(val_data['traj_b'], dim=-2))
 
                 dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
                 log_likelihood = torch.mean(logsigmoid(dot_prod))
@@ -144,10 +143,15 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
     accuracies = []
     best_val_acc = 0
     for epoch in range(epochs):
-        loss = 0
-        with tqdm(total=len(train_loader), unit="batch") as pbar:
+        ep_loss = AverageMeter('loss')
+        ep_log_likelihood_loss = AverageMeter('log_likelihood_loss')
+        ep_reconstruction_loss = AverageMeter('reconstruction_loss')
+        ep_cosine_sim = AverageMeter('cosine_similarity')
+        ep_norm_loss = AverageMeter('norm_loss')
+
+        with tqdm(total=len(train_loader), unit='batch') as pbar:
+            pbar.set_description(f"Epoch {epoch + 1}/{epochs}")
             for train_data in train_loader:
-                pbar.set_description(f"Epoch {epoch + 1}/{epochs}")
                 # load it to the active device
                 train_data = {key: value.to(device) for key, value in train_data.items()}
 
@@ -160,21 +164,28 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
 
                 # compute training reconstruction loss
                 # MSELoss already takes the mean over the batch.
-                reconstruction_loss = mse(decoded_traj_a, torch.mean(train_data['traj_a'], dim=-2))
-                reconstruction_loss += mse(decoded_traj_b, torch.mean(train_data['traj_b'], dim=-2))
-                # print("reconstruction_loss:", reconstruction_loss.shape)
+                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(train_data['traj_a'], dim=-2))
+                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(train_data['traj_b'], dim=-2))
 
                 # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
                 cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
                 cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
                 distance_loss = 1 - cos_sim  # Then convert the value to a loss.
-                # print("distance_loss:", distance_loss.shape)
 
                 dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
                 log_likelihood = logsigmoid(dot_prod)
                 log_likelihood = torch.mean(log_likelihood)  # Take the mean over the batch.
                 log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
 
+                # Norm loss, to make sure the encoded vectors are unit vectors
+                norm_loss = F.mse_loss(torch.norm(encoded_traj_a, dim=-1),
+                                       torch.ones(encoded_traj_a.shape[0]).to(device))
+                norm_loss += F.mse_loss(torch.norm(encoded_traj_b, dim=-1),
+                                        torch.ones(encoded_traj_b.shape[0]).to(device))
+                norm_loss += F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
+
+                # norm loss
+                # By now, train_loss is a scalar.
                 # train_loss = reconstruction_loss + distance_loss
                 train_loss = reconstruction_loss + log_likelihood_loss
 
@@ -185,20 +196,24 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
                 optimizer.step()
 
                 # add the mini-batch training loss to epoch loss
-                loss += train_loss.item()
+                ep_loss.update(train_loss.item(), train_data['traj_a'].shape[0])
+                ep_reconstruction_loss.update(reconstruction_loss.item(), train_data['traj_a'].shape[0])
+                ep_log_likelihood_loss.update(log_likelihood_loss.item(), train_data['traj_a'].shape[0])
+                ep_cosine_sim.update(cos_sim.item(), train_data['traj_a'].shape[0])
 
-                pbar.set_postfix({"log_likelihood_loss": log_likelihood_loss.item(),
-                                  "reconstruction_loss": reconstruction_loss.item(),
-                                  "cosine_similarity": cos_sim.item()})
+                tqdm_postfix = {"log_likelihood_loss": ep_log_likelihood_loss.avg,
+                                "reconstruction_loss": ep_reconstruction_loss.avg,
+                                "cosine_similarity": ep_cosine_sim.avg,
+                                }
+
+                pbar.set_postfix(tqdm_postfix)
+
                 pbar.update()
-
-        # compute the epoch training loss
-        # Note: this is the per-BATCH loss. len(train_loader) gives number of batches.
-        loss = loss / len(train_loader)
 
         # Evaluation
         val_loss = 0
         val_reconstruction_loss = 0
+        val_norm_loss = 0
         val_cosine_similarity = 0
         val_log_likelihood = 0
         num_correct = 0
@@ -209,9 +224,16 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
 
                 encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
 
-                reconstruction_loss = mse(decoded_traj_a, torch.mean(val_data['traj_a'], dim=-2))
-                reconstruction_loss += mse(decoded_traj_b, torch.mean(val_data['traj_b'], dim=-2))
+                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(val_data['traj_a'], dim=-2))
+                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(val_data['traj_b'], dim=-2))
                 val_reconstruction_loss += reconstruction_loss.item()  # record
+
+                norm_loss = F.mse_loss(torch.norm(encoded_traj_a, dim=-1),
+                                       torch.ones(encoded_traj_a.shape[0]).to(device))
+                norm_loss += F.mse_loss(torch.norm(encoded_traj_b, dim=-1),
+                                        torch.ones(encoded_traj_b.shape[0]).to(device))
+                norm_loss += F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
+                val_norm_loss += norm_loss.item()
 
                 cos_sim = torch.mean(F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang))
                 distance_loss = 1 - cos_sim
@@ -230,18 +252,21 @@ def train(logger, seed, data_dir, save_dir, epochs, batch_size, learning_rate=1e
         val_cosine_similarity /= len(val_loader)
         val_log_likelihood /= len(val_loader)
         val_acc = num_correct / len(val_dataset)
+        val_norm_loss /= len(val_loader)
 
         # display the epoch training loss
         logger.info(
-            "epoch : {}/{}, [train] loss = {:.4f}, [val] loss = {:.4f}, [val] reconstruction_loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.6f}".format(
-                epoch + 1, epochs, loss, val_loss, val_reconstruction_loss, val_cosine_similarity, val_log_likelihood,
+            "epoch : {}/{}, [train] loss = {:.4f}, [val] loss = {:.4f}, [val] reconstruction_loss = {:.4f}, "
+            "[val] norm loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.6f}".format(
+                epoch + 1, epochs, ep_loss.avg, val_loss, val_reconstruction_loss, val_norm_loss, val_cosine_similarity,
+                val_log_likelihood,
                 val_acc))
         # Don't forget to save the model (as we go)!
         torch.save(model.state_dict(), os.path.join(save_dir, 'model_state_dict_{}.pth'.format(epoch)))
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(model.state_dict(), os.path.join(save_dir, 'best_model_state_dict.pth'))
-        train_losses.append(loss)
+        train_losses.append(ep_loss.avg)
         val_losses.append(val_loss)
         val_reconstruction_losses.append(val_reconstruction_loss)
         val_cosine_similarities.append(val_cosine_similarity)
