@@ -17,8 +17,8 @@ os.environ["OMP_NUM_THREADS"] = "4"
 
 
 def train(logger, args):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
     #  use gpu if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,7 +57,7 @@ def train(logger, args):
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.to(device)
 
     # mean-squared error loss
@@ -295,7 +295,7 @@ if __name__ == '__main__':
     parser.add_argument('--preprocessed-nlcomps', action="store_true", help='')
     parser.add_argument('--initial-loss-check', action="store_true", help='whether to check initial loss')
     parser.add_argument('--finetune-bert', action="store_true", help='whether to finetune BERT')
-    parser.add_argument('--model-save-dir', type=str, default='feature_learning/', help='where to save the model')
+    parser.add_argument('--save-dir', type=str, default='feature_learning/', help='where to save the model')
     parser.add_argument('--bert-model', type=str, default='bert-base', help='which BERT model to use')
     parser.add_argument('--use-bert-encoder', action="store_true", help='whether to use BERT in the language encoder')
     parser.add_argument('--traj-encoder', default='mlp', choices=['mlp', 'transformer', 'lstm'],

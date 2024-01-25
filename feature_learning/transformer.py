@@ -115,19 +115,19 @@ class TransformerEncoder(nn.Module):
     def forward(self, x):
         # x has shape (batch_size, sequence length, input_size)
         # encode state and action
-        x = self.embed(x)
+        x = self.embed_sa(x)
 
         # encode timesteps
         timesteps = torch.arange(x.shape[1]).to(x.device)
         timesteps = self.embed_timesteps(timesteps)
         x = x + timesteps
 
-        # if self.use_cnn_in_transformer:
-        #     # Reshape to (batch_size, input_size, sequence length)
-        #     x = x.transpose(1, 2)
-        #     x = self.cnn_layers(x)
-        #     # Reshape back to (batch_size, sequence length // 4, input_size)
-        #     x = x.transpose(1, 2)
+        if self.use_cnn_in_transformer:
+            # Reshape to (batch_size, input_size, sequence length)
+            x = x.transpose(1, 2)
+            x = self.cnn_layers(x)
+            # Reshape back to (batch_size, sequence length // 4, input_size)
+            x = x.transpose(1, 2)
         # x = self.tokenlearner(x)
         # Add the CLS token
         # cls_token = self.cls_token.repeat(x.shape[0], 1, 1)
