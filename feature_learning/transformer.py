@@ -42,11 +42,76 @@ class MultiheadAttention(nn.Module):
         return self.attn(x, x, x, attn_mask=mask)[0]
 
 
+class CasualAttention(nn.Module):
+    def __init__(self, d_model, num_heads, max_ep_len, dropout=0.0, scale=True):
+        super(CasualAttention, self).__init__()
+        self.n_embed = d_model
+        self.n_head = num_heads
+        self.attn_dropout = nn.Dropout(dropout)
+        self.residual_dropout = nn.Dropout(dropout)
+
+        self.register_buffer(
+            "bias",
+            torch.tril(torch.ones((max_ep_len, max_ep_len), dtype=torch.bool)).view(
+                1, 1, max_ep_len, max_ep_len
+            )
+        )
+
+        self.scale = scale
+
+    def _attn(self, q, k, v, attention_mask=None):
+        w = torch.matmul(q, k)
+        if self.scale:
+            w = w / math.sqrt(v.size(-1))
+
+        nd, ns = w.size(-2), w.size(-1)
+        casual_mask = self.bias[:, :, ns - nd: ns, :ns]
+        mask_value = torch.finfo(w.dtype).min
+        w = torch.where(casual_mask, w, mask_value)
+
+        if attention_mask is not None:
+            # Apply the attention mask
+            w = w + attention_mask
+
+        w = F.softmax(w, dim=-1)
+        w = self.attn_dropout(w)
+        return torch.matmul(w, v)
+
+    def merge_heads(self, x):
+        x = x.permute(0, 2, 1, 3).contiguous()
+        new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
+        return x.view(*new_x_shape)
+
+    def split_heads(self, x, k=False):
+        new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
+        x = x.view(*new_x_shape)
+        if k:
+            return x.permute(0, 2, 3, 1)
+        else:
+            return x.permute(0, 2, 1, 3)
+
+    def forward(self, x, mask=None):
+        q, k, v = x, x, x
+        q = self.split_heads(q)
+        k = self.split_heads(k, k=True)
+        v = self.split_heads(v)
+
+        attn_outputs = self._attn(q, k, v, attention_mask=mask)
+        attn_outputs = self.merge_heads(attn_outputs)
+        return attn_outputs
+
+
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model=512, num_heads=8, dff=2048, dropout=0.0, norm_layer=True):
+    def __init__(self, d_model=512, num_heads=8, dff=2048, dropout=0.0, max_ep_len=500, casual_transformer=False):
         super(EncoderLayer, self).__init__()
         self.layernorm1 = nn.LayerNorm(d_model, eps=1e-6)
-        self.multi_head_attention = MultiheadAttention(d_model, num_heads, dropout)
+        self.use_casual_transformer = casual_transformer
+
+        if self.use_casual_transformer:
+            self.attn = CasualAttention(d_model, num_heads, max_ep_len=max_ep_len, dropout=dropout, scale=True)
+        else:
+            self.attn = MultiheadAttention(d_model, num_heads, dropout)
+
         self.dropout_attention = nn.Dropout(dropout)
         self.layernorm2 = nn.LayerNorm(d_model, eps=1e-6)
         self.feedforward = FeedForward(d_model, dff, dropout)
@@ -56,9 +121,8 @@ class EncoderLayer(nn.Module):
         x = inputs
         # Put normalization layer inside residual connection according to https://arxiv.org/pdf/2002.04745.pdf
         x = self.layernorm1(x)
-        attention_output = self.multi_head_attention(x, mask=mask)
+        attention_output = self.attn(x, mask=mask)
         x = x + self.dropout_attention(attention_output)
-
         x = self.layernorm2(x)
         feedforward_output = self.feedforward(x)
         x = x + self.dropout_ff(feedforward_output)
@@ -79,7 +143,6 @@ class TokenLearner(nn.Module):
         )
         self.layernorm = nn.LayerNorm(token_dim, eps=1e-6)
 
-
     def forward(self, x):
         # x has shape (batch_size, sequence length, token_dim)
 
@@ -94,13 +157,16 @@ class TokenLearner(nn.Module):
 
 class TransformerEncoder(nn.Module):
     def __init__(self, input_size, d_model, nhead, d_hid, nlayers, d_ff, dropout=0.5, max_ep_len=600,
-                 use_cnn_in_transformer=False):
+                 use_cnn_in_transformer=False, use_casual_attention=False):
         super().__init__()
         # self.pos_encoder = PositionalEncoding(d_model)
         self.embed_sa = nn.Linear(input_size, d_model)
         self.embed_timesteps = nn.Embedding(max_ep_len, d_model)
         # self.tokenlearner = TokenLearner(token_dim=d_model, num_selected_tokens=50)
-        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout) for _ in range(nlayers)])
+        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_hid, dropout,
+                                                          max_ep_len, casual_transformer=use_casual_attention)
+                                             for _ in range(nlayers)])
+
         self.feedforward = FeedForward(d_model, d_ff, dropout)
         self.use_cnn_in_transformer = use_cnn_in_transformer
         if self.use_cnn_in_transformer:

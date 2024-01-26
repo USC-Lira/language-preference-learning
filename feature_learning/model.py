@@ -25,14 +25,16 @@ class NLTrajEncoder(nn.Module):
 class NLTrajAutoencoder(nn.Module):
     def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
                  bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
-                 use_bert_encoder=False, traj_encoder='mlp', use_cnn_in_transformer=False):
+                 use_bert_encoder=False, traj_encoder='mlp', use_cnn_in_transformer=False,
+                 use_casual_attention=False):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
         self.traj_encoder_cls = traj_encoder
         if traj_encoder == 'transformer':
             self.traj_encoder = TransformerEncoder(
                 input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
-                nlayers=2, d_ff=feature_dim, dropout=0.1, use_cnn_in_transformer=use_cnn_in_transformer
+                nlayers=2, d_ff=feature_dim, dropout=0.1, use_cnn_in_transformer=use_cnn_in_transformer,
+                use_casual_attention=use_casual_attention
             )
         elif traj_encoder == 'mlp':
             self.traj_encoder = nn.Sequential(
@@ -44,7 +46,6 @@ class NLTrajAutoencoder(nn.Module):
             self.traj_encoder = LSTMEncoder(
                 state_dim=STATE_DIM, action_dim=ACTION_DIM, hidden_dim=encoder_hidden_dim, output_dim=feature_dim
             )
-
         else:
             raise ValueError(f"Trajectory encoder {traj_encoder} not found")
 

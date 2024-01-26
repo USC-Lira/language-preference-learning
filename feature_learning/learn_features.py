@@ -39,7 +39,8 @@ def train(logger, args):
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=args.preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
                               use_bert_encoder=args.use_bert_encoder, traj_encoder=args.traj_encoder,
-                              use_cnn_in_transformer=args.use_cnn_in_transformer)
+                              use_cnn_in_transformer=args.use_cnn_in_transformer,
+                              use_casual_attention=args.use_casual_attention)
 
     if args.use_bert_encoder:
         if not args.finetune_bert:
@@ -286,7 +287,7 @@ if __name__ == '__main__':
     parser.add_argument('--exp-name', type=str, default='feature_learning', help='The name of experiment')
     parser.add_argument('--seed', type=int, default=0, help='')
     parser.add_argument('--data-dir', type=str, default='data/', help='')
-    parser.add_argument('--epochs', type=int, default=10, help='')
+    parser.add_argument('--epochs', type=int, default=5, help='')
     parser.add_argument('--batch-size', type=int, default=1024, help='')
     parser.add_argument('--lr', type=float, default=1e-3, help='')
     parser.add_argument('--weight-decay', type=float, default=0, help='')
@@ -303,6 +304,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-heads', type=int, default=4, help='number of heads in the multi-head attention')
     parser.add_argument('--n-layers', type=int, default=3, help='number of layers in the trajectory transformer')
     parser.add_argument('--use-cnn-in-transformer', action="store_true", help='whether to use CNN in the transformer')
+    parser.add_argument('--use-casual-attention', action="store_true", help='whether to use casual attention in the transformer')
 
     args = parser.parse_args()
 
