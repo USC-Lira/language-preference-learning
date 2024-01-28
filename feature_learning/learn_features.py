@@ -262,9 +262,7 @@ def train(logger, args):
                                 }
 
                 pbar.set_postfix(tqdm_postfix)
-
                 pbar.update()
-                break
 
         # Evaluation
         val_metrics = evaluate(model, val_loader, device)
