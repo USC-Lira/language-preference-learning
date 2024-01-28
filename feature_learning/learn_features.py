@@ -16,6 +16,84 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["OMP_NUM_THREADS"] = "4"
 
 
+def load_data(args, split='train'):
+    # Load the data.
+    # nlcomp_index_file is a .npy file with the indexes of the nlcomps in the dataset.
+    nlcomp_index_file = os.path.join(args.data_dir, "{}/nlcomp_indexes.npy".format(split))
+
+    # If we don't use bert in the language encoder, then we need to load the preprocessed nlcomps.
+    if not args.use_bert_encoder:
+        unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.bert_model))
+    else:
+        unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps.json".format(split))
+
+    # traj_a_index_file is a .npy file with the indexes of the first trajectory in the dataset.
+    # traj_b_index_file is a .npy file with the indexes of the second trajectory in the dataset.
+    # traj_file is a .npy file with the trajectories of shape (n_trajectories, n_timesteps, STATE_DIM+ACTION_DIM)
+    traj_a_index_file = os.path.join(args.data_dir, "{}/traj_a_indexes.npy".format(split))
+    traj_b_index_file = os.path.join(args.data_dir, "{}/traj_b_indexes.npy".format(split))
+    traj_file = os.path.join(args.data_dir, "{}/trajs.npy".format(split))
+
+    return_files_dict = {
+        'trajs': traj_file,
+        'traj_a_index': traj_a_index_file,
+        'traj_b_index': traj_b_index_file,
+        'unique_nlcomp': unique_nlcomp_file,
+        'nlcomp_index': nlcomp_index_file
+    }
+
+    return return_files_dict
+
+
+def evaluate(model, data_loader, device):
+    total_loss = 0
+    total_reconstruction_loss = 0
+    total_norm_loss = 0
+    total_cosine_similarity = 0
+    total_log_likelihood = 0
+    total_num_correct = 0
+    logsigmoid = nn.LogSigmoid()
+    for data in data_loader:
+        with torch.no_grad():
+            data = {key: value.to(device) for key, value in data.items()}
+            pred = model(data)
+
+            encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
+
+            reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data['traj_a'], dim=-2))
+            reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(data['traj_b'], dim=-2))
+            total_reconstruction_loss += reconstruction_loss.detach().cpu().item()
+
+            norm_loss = F.mse_loss(torch.norm(encoded_traj_a, dim=-1),
+                                   torch.ones(encoded_traj_a.shape[0]).to(device))
+            norm_loss += F.mse_loss(torch.norm(encoded_traj_b, dim=-1),
+                                    torch.ones(encoded_traj_b.shape[0]).to(device))
+            norm_loss += F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
+            total_norm_loss += norm_loss.detach().cpu().item()
+
+            cos_sim = torch.mean(F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang))
+            total_cosine_similarity += cos_sim.detach().cpu().item()
+
+            dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
+            log_likelihood = torch.mean(logsigmoid(dot_prod))
+            log_likelihood_loss = -1 * log_likelihood
+            total_log_likelihood += -log_likelihood_loss.detach().cpu().item()
+
+            total_loss += (reconstruction_loss + log_likelihood_loss).detach().cpu().item()
+            total_num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
+
+    metrics = {
+        'loss': total_loss / len(data_loader),
+        'reconstruction_loss': total_reconstruction_loss / len(data_loader),
+        'norm_loss': total_norm_loss / len(data_loader),
+        'cosine_similarity': total_cosine_similarity / len(data_loader),
+        'log_likelihood': total_log_likelihood / len(data_loader),
+        'accuracy': total_num_correct / len(data_loader.dataset),
+    }
+
+    return metrics
+
+
 def train(logger, args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -37,7 +115,8 @@ def train(logger, args):
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
-                              preprocessed_nlcomps=args.preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
+                              preprocessed_nlcomps=args.preprocessed_nlcomps,
+                              bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
                               use_bert_encoder=args.use_bert_encoder, traj_encoder=args.traj_encoder,
                               use_cnn_in_transformer=args.use_cnn_in_transformer,
                               use_casual_attention=args.use_casual_attention)
@@ -69,38 +148,27 @@ def train(logger, args):
     if not os.path.isdir(args.save_dir):
         os.makedirs(args.save_dir)
 
-    # Some file-handling logic first.
-    # If we don't use bert in the language encoder, then we need to load the preprocessed nlcomps.
-    if not args.use_bert_encoder:
-        train_nlcomp_index_file = os.path.join(args.data_dir, "train/nlcomp_indexes_{}.npy".format(args.bert_model))
-        train_unique_nlcomp_file = os.path.join(args.data_dir, "train/unique_nlcomps_{}.npy".format(args.bert_model))
-        val_nlcomp_index_file = os.path.join(args.data_dir, "val/nlcomp_indexes_{}.npy".format(args.bert_model))
-        val_unique_nlcomp_file = os.path.join(args.data_dir, "val/unique_nlcomps_{}.npy".format(args.bert_model))
-    else:
-        train_nlcomp_index_file = os.path.join(args.data_dir, "train/nlcomp_indexes_{}.npy".format(args.bert_model))
-        train_unique_nlcomp_file = os.path.join(args.data_dir, "train/unique_nlcomps_{}.json".format(args.bert_model))
-        val_nlcomp_index_file = os.path.join(args.data_dir, "val/nlcomp_indexes_{}.npy".format(args.bert_model))
-        val_unique_nlcomp_file = os.path.join(args.data_dir, "val/unique_nlcomps_{}.json".format(args.bert_model))
+    train_files_dict = load_data(args, split='train')
+    val_files_dict = load_data(args, split='val')
+    test_files_dict = load_data(args, split='test')
 
-    train_traj_a_index_file = os.path.join(args.data_dir, "train/traj_a_indexes.npy")
-    train_traj_b_index_file = os.path.join(args.data_dir, "train/traj_b_indexes.npy")
-    train_traj_file = os.path.join(args.data_dir, "train/trajs.npy")
-    val_traj_a_index_file = os.path.join(args.data_dir, "val/traj_a_indexes.npy")
-    val_traj_b_index_file = os.path.join(args.data_dir, "val/traj_b_indexes.npy")
-    val_traj_file = os.path.join(args.data_dir, "val/trajs.npy")
+    train_dataset = NLTrajComparisonDataset(train_files_dict['nlcomp_index'], train_files_dict['traj_a_index'],
+                                            train_files_dict['traj_b_index'],
+                                            tokenizer=tokenizer, preprocessed_nlcomps=args.preprocessed_nlcomps,
+                                            unique_nlcomp_file=train_files_dict['unique_nlcomp'],
+                                            traj_file=train_files_dict['trajs'])
 
-    train_dataset = NLTrajComparisonDataset(train_nlcomp_index_file, train_traj_a_index_file,
-                                            train_traj_b_index_file, tokenizer=tokenizer,
-                                            preprocessed_nlcomps=args.preprocessed_nlcomps,
-                                            unique_nlcomp_file=train_unique_nlcomp_file, traj_file=train_traj_file)
-    val_dataset = NLTrajComparisonDataset(val_nlcomp_index_file, val_traj_a_index_file, val_traj_b_index_file,
-                                          tokenizer=tokenizer,
-                                          preprocessed_nlcomps=args.preprocessed_nlcomps,
-                                          unique_nlcomp_file=val_unique_nlcomp_file, traj_file=val_traj_file)
+    val_dataset = NLTrajComparisonDataset(val_files_dict['nlcomp_index'], val_files_dict['traj_a_index'],
+                                          val_files_dict['traj_b_index'],
+                                          tokenizer=tokenizer, preprocessed_nlcomps=args.preprocessed_nlcomps,
+                                          unique_nlcomp_file=val_files_dict['unique_nlcomp'],
+                                          traj_file=val_files_dict['trajs'])
 
-    # NOTE: this creates a dataset that doesn't have trajectories separated across datasets. DEPRECATED.
-    # generator = torch.Generator().manual_seed(seed)
-    # train_dataset, val_dataset = torch.utils.data.random_split(dataset, lengths=[0.9, 0.1], generator=generator)
+    test_dataset = NLTrajComparisonDataset(test_files_dict['nlcomp_index'], test_files_dict['traj_a_index'],
+                                           test_files_dict['traj_b_index'],
+                                           tokenizer=tokenizer, preprocessed_nlcomps=args.preprocessed_nlcomps,
+                                           unique_nlcomp_file=test_files_dict['unique_nlcomp'],
+                                           traj_file=test_files_dict['trajs'])
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True
@@ -108,30 +176,15 @@ def train(logger, args):
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True,
     )
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True,
+    )
 
     if args.initial_loss_check:
         logger.info("Initial loss sanity check...")
-        temp_loss = 0
-        num_correct = 0
-        for val_data in val_loader:
-            with torch.no_grad():
-                val_data = {key: value.to(device) for key, value in val_data.items()}
-                pred = model(val_data)
 
-                encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
-                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(val_data['traj_a'], dim=-2)) + \
-                                      F.mse_loss(decoded_traj_b, torch.mean(val_data['traj_b'], dim=-2))
-
-                dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
-                log_likelihood = torch.mean(logsigmoid(dot_prod))
-                log_likelihood_loss = -1 * log_likelihood
-
-                temp_loss += (reconstruction_loss + log_likelihood_loss).item()
-                num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
-
-        temp_loss /= len(val_loader)
-        accuracy = num_correct / len(val_dataset)
-        logger.info("initial val loss: {:.4f}, accuracy: {:.4f}".format(temp_loss, accuracy))
+        val_metrics = evaluate(model, val_loader, device)
+        logger.info("initial val loss: {:.4f}, accuracy: {:.4f}".format(val_metrics['loss'], val_metrics['accuracy']))
 
     logger.info("Beginning training...")
     train_losses = []
@@ -140,7 +193,7 @@ def train(logger, args):
     val_cosine_similarities = []
     val_log_likelihoods = []
     accuracies = []
-    best_val_acc = 0
+    best_val_cos_sim = 0
     for epoch in range(args.epochs):
         ep_loss = AverageMeter('loss')
         ep_log_likelihood_loss = AverageMeter('log_likelihood_loss')
@@ -203,68 +256,37 @@ def train(logger, args):
                 tqdm_postfix = {"log_likelihood_loss": ep_log_likelihood_loss.avg,
                                 "reconstruction_loss": ep_reconstruction_loss.avg,
                                 "cosine_similarity": ep_cosine_sim.avg,
+                                "norm_loss": ep_norm_loss.avg,
                                 }
 
                 pbar.set_postfix(tqdm_postfix)
 
                 pbar.update()
+                break
 
         # Evaluation
-        val_loss = 0
-        val_reconstruction_loss = 0
-        val_norm_loss = 0
-        val_cosine_similarity = 0
-        val_log_likelihood = 0
-        num_correct = 0
-        for val_data in val_loader:
-            with torch.no_grad():
-                val_data = {key: value.to(device) for key, value in val_data.items()}
-                pred = model(val_data)
-
-                encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
-
-                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(val_data['traj_a'], dim=-2))
-                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(val_data['traj_b'], dim=-2))
-                val_reconstruction_loss += reconstruction_loss.item()  # record
-
-                norm_loss = F.mse_loss(torch.norm(encoded_traj_a, dim=-1),
-                                       torch.ones(encoded_traj_a.shape[0]).to(device))
-                norm_loss += F.mse_loss(torch.norm(encoded_traj_b, dim=-1),
-                                        torch.ones(encoded_traj_b.shape[0]).to(device))
-                norm_loss += F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
-                val_norm_loss += norm_loss.item()
-
-                cos_sim = torch.mean(F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang))
-                distance_loss = 1 - cos_sim
-                val_cosine_similarity += cos_sim.item()
-
-                dot_prod = torch.einsum('ij,ij->i', encoded_traj_b - encoded_traj_a, encoded_lang)
-                log_likelihood = torch.mean(logsigmoid(dot_prod))
-                log_likelihood_loss = -1 * log_likelihood
-                val_log_likelihood += log_likelihood.item()
-
-                val_loss += (reconstruction_loss + log_likelihood_loss).item()
-                num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
-
-        val_loss /= len(val_loader)
-        val_reconstruction_loss /= len(val_loader)
-        val_cosine_similarity /= len(val_loader)
-        val_log_likelihood /= len(val_loader)
-        val_acc = num_correct / len(val_dataset)
-        val_norm_loss /= len(val_loader)
+        val_metrics = evaluate(model, val_loader, device)
+        val_loss = val_metrics['loss']
+        val_reconstruction_loss = val_metrics['reconstruction_loss']
+        val_norm_loss = val_metrics['norm_loss']
+        val_cosine_similarity = val_metrics['cosine_similarity']
+        val_log_likelihood = val_metrics['log_likelihood']
+        val_acc = val_metrics['accuracy']
 
         # display the epoch training loss
         logger.info(
             "epoch : {}/{}, [train] loss = {:.4f}, [val] loss = {:.4f}, [val] reconstruction_loss = {:.4f}, "
-            "[val] norm loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.6f}".format(
-                epoch + 1, args.epochs, ep_loss.avg, val_loss, val_reconstruction_loss, val_norm_loss, val_cosine_similarity,
+            "[val] norm loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.4f}".format(
+                epoch + 1, args.epochs, ep_loss.avg, val_loss, val_reconstruction_loss, val_norm_loss,
+                val_cosine_similarity,
                 val_log_likelihood,
                 val_acc))
         # Don't forget to save the model (as we go)!
         torch.save(model.state_dict(), os.path.join(args.save_dir, 'model_state_dict_{}.pth'.format(epoch)))
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        if val_cosine_similarity > best_val_cos_sim:
+            best_val_cos_sim = val_cosine_similarity
             torch.save(model.state_dict(), os.path.join(args.save_dir, 'best_model_state_dict.pth'))
+
         train_losses.append(ep_loss.avg)
         val_losses.append(val_loss)
         val_reconstruction_losses.append(val_reconstruction_loss)
@@ -277,6 +299,24 @@ def train(logger, args):
         np.save(os.path.join(args.save_dir, 'val_cosine_similarities.npy'), np.asarray(val_cosine_similarities))
         np.save(os.path.join(args.save_dir, 'val_log_likelihoods.npy'), np.asarray(val_log_likelihoods))
         np.save(os.path.join(args.save_dir, 'accuracies.npy'), np.asarray(accuracies))
+
+    # Test the model on the test set.
+    model.load_state_dict(torch.load(os.path.join(args.save_dir, 'best_model_state_dict.pth')))
+    model.eval()
+
+    test_metrics = evaluate(model, test_loader, device)
+
+    test_loss = test_metrics['loss']
+    test_reconstruction_loss = test_metrics['reconstruction_loss']
+    test_norm_loss = test_metrics['norm_loss']
+    test_cosine_similarity = test_metrics['cosine_similarity']
+    test_log_likelihood = test_metrics['log_likelihood']
+    test_acc = test_metrics['accuracy']
+
+    # display the epoch training loss
+    logger.info("[test] loss = {:.4f}, [test] reconstruction_loss = {:.4f}, [test] norm loss = {:.4f}, "
+                "[test] cos_similarity = {:.4f}, [test] log_likelihood = {:.4f}, [test] accuracy = {:.4f}".format(
+        test_loss, test_reconstruction_loss, test_norm_loss, test_cosine_similarity, test_log_likelihood, test_acc))
 
     return model
 
@@ -304,7 +344,10 @@ if __name__ == '__main__':
     parser.add_argument('--n-heads', type=int, default=4, help='number of heads in the multi-head attention')
     parser.add_argument('--n-layers', type=int, default=3, help='number of layers in the trajectory transformer')
     parser.add_argument('--use-cnn-in-transformer', action="store_true", help='whether to use CNN in the transformer')
-    parser.add_argument('--use-casual-attention', action="store_true", help='whether to use casual attention in the transformer')
+    parser.add_argument('--use-casual-attention', action="store_true",
+                        help='whether to use casual attention in the transformer')
+    parser.add_argument('--set-different-lr', action="store_true",
+                        help='whether to set different learning rates for different layers')
 
     args = parser.parse_args()
 

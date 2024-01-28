@@ -1,7 +1,6 @@
 import os
 import datetime
 import logging
-import colorlog
 
 BERT_MODEL_NAME = {
     'bert-base': 'google/bert_uncased_L-12_H-768_A-12',
