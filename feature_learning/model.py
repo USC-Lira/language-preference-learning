@@ -26,15 +26,16 @@ class NLTrajAutoencoder(nn.Module):
     def __init__(self, encoder_hidden_dim=128, feature_dim=256, decoder_hidden_dim=128,
                  bert_output_dim=768, lang_encoder=None, preprocessed_nlcomps=False,
                  use_bert_encoder=False, traj_encoder='mlp', use_cnn_in_transformer=False,
-                 use_casual_attention=False):
+                 use_casual_attention=False, use_cls_token=False):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
         self.traj_encoder_cls = traj_encoder
+        self.use_cls_token = use_cls_token
         if traj_encoder == 'transformer':
             self.traj_encoder = TransformerEncoder(
                 input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
                 nlayers=2, d_ff=feature_dim, dropout=0.1, use_cnn_in_transformer=use_cnn_in_transformer,
-                use_casual_attention=use_casual_attention
+                use_casual_attention=use_casual_attention, use_cls_token=use_cls_token
             )
         elif traj_encoder == 'mlp':
             self.traj_encoder = nn.Sequential(
@@ -79,8 +80,13 @@ class NLTrajAutoencoder(nn.Module):
         encoded_traj_b = self.traj_encoder(traj_b)
 
         if self.traj_encoder_cls == 'transformer':
-            encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
-            encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+            if self.use_cls_token:
+                # Use the CLS token as the embedding
+                encoded_traj_a = encoded_traj_a[:, -1, :]
+                encoded_traj_b = encoded_traj_b[:, -1, :]
+            else:
+                encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
+                encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
         elif self.traj_encoder_cls == 'lstm':
             encoded_traj_a = encoded_traj_a
             encoded_traj_b = encoded_traj_b

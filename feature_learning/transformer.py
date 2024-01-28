@@ -157,7 +157,7 @@ class TokenLearner(nn.Module):
 
 class TransformerEncoder(nn.Module):
     def __init__(self, input_size, d_model, nhead, d_hid, nlayers, d_ff, dropout=0.5, max_ep_len=600,
-                 use_cnn_in_transformer=False, use_casual_attention=False):
+                 use_cnn_in_transformer=False, use_casual_attention=False, use_cls_token=False):
         super().__init__()
         # self.pos_encoder = PositionalEncoding(d_model)
         self.embed_sa = nn.Linear(input_size, d_model)
@@ -176,7 +176,8 @@ class TransformerEncoder(nn.Module):
                 nn.Conv1d(in_channels=d_model, out_channels=d_model, kernel_size=3, stride=2, padding=1),
                 nn.ReLU(),
             )
-        # self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
+        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
+        self.use_cls_token = use_cls_token
 
     def forward(self, x):
         # x has shape (batch_size, sequence length, input_size)
@@ -195,9 +196,11 @@ class TransformerEncoder(nn.Module):
             # Reshape back to (batch_size, sequence length // 4, input_size)
             x = x.transpose(1, 2)
         # x = self.tokenlearner(x)
+
         # Add the CLS token
-        # cls_token = self.cls_token.repeat(x.shape[0], 1, 1)
-        # x = torch.cat((cls_token, x), dim=1)
+        cls_token = self.cls_token.repeat(x.shape[0], 1, 1)
+        if self.use_cls_token:
+            x = torch.cat((x, cls_token), dim=1)
 
         for layer in self.encoder_layers:
             x = layer(x)
