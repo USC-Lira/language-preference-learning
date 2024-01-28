@@ -1,21 +1,29 @@
 import numpy as np
 
+# greater_gtreward_adjs = ["better", "more successfully"]
+# greater_gtreward_adjs_val = ["more effectively"]
+# less_gtreward_adjs = ["worse", "not as well"]
+# less_gtreward_adjs_val = ["less successfully"]
+# greater_speed_adjs = ["faster", "quicker", "swifter", "at a higher speed"]
+# greater_speed_adjs_val = ["more quickly"]
+# less_speed_adjs = ["slower", "more moderate", "more sluggish", "at a lower speed"]
+# less_speed_adjs_val = ["more slowly"]
+# greater_height_adjs = ["higher", "taller", "at a greater height"]
+# greater_height_adjs_val = ["to a greater height"]
+# less_height_adjs = ["lower", "shorter", "at a lesser height"]
+# less_height_adjs_val = ["to a lower height"]
+# greater_distance_adjs = ["further", "farther", "more distant"]
+# greater_distance_adjs_val = ["less nearby"]
+# less_distance_adjs = ["closer", "nearer", "more nearby"]
+# less_distance_adjs_val = ["less distant"]
 greater_gtreward_adjs = ["better", "more successfully"]
-greater_gtreward_adjs_val = ["more effectively"]
 less_gtreward_adjs = ["worse", "not as well"]
-less_gtreward_adjs_val = ["less successfully"]
 greater_speed_adjs = ["faster", "quicker", "swifter", "at a higher speed"]
-greater_speed_adjs_val = ["more quickly"]
 less_speed_adjs = ["slower", "more moderate", "more sluggish", "at a lower speed"]
-less_speed_adjs_val = ["more slowly"]
 greater_height_adjs = ["higher", "taller", "at a greater height"]
-greater_height_adjs_val = ["to a greater height"]
 less_height_adjs = ["lower", "shorter", "at a lesser height"]
-less_height_adjs_val = ["to a lower height"]
 greater_distance_adjs = ["further", "farther", "more distant"]
-greater_distance_adjs_val = ["less nearby"]
 less_distance_adjs = ["closer", "nearer", "more nearby"]
-less_distance_adjs_val = ["less distant"]
 
 GT_REWARD_MEAN = None
 GT_REWARD_STD = None
@@ -76,7 +84,8 @@ def calc_and_set_global_vars(trajs):
 
 
 # NOTE: For this function, we produce commands that would change traj1 to traj2.
-def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, augmented_comps=None, validation=False):
+def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, augmented_comps=None, validation=False,
+                                            split='train'):
     horizon = len(traj1)
 
     value_func = {
@@ -89,27 +98,27 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
     ori_commands = {
         "gt_reward":
             [["Lift the cube " + w + "." for w in comps] for comps in
-             [greater_gtreward_adjs, less_gtreward_adjs, greater_gtreward_adjs_val, less_gtreward_adjs_val]],
+             [greater_gtreward_adjs, less_gtreward_adjs]],
         "speed":
             [["Move " + w + "." for w in comps] for comps in
-             [greater_speed_adjs, less_speed_adjs, greater_speed_adjs_val, less_speed_adjs_val]],
+             [greater_speed_adjs, less_speed_adjs]],
         "height":
             [["Move " + w + "." for w in comps] for comps in
-             [greater_height_adjs, less_height_adjs, greater_height_adjs_val, less_height_adjs_val]],
+             [greater_height_adjs, less_height_adjs]],
         "distance_to_bottle":
             # [["Move " + w + " from the bottle." for w in comps] for comps in
             #  [greater_distance_adjs, less_distance_adjs, greater_distance_adjs_val, less_distance_adjs_val]],
             [["Move " + w + " from the bottle." for w in greater_distance_adjs],
-             ["Move " + w + " to the bottle." for w in less_distance_adjs],
-             ["Move " + w + " from the bottle." for w in greater_distance_adjs_val],
-             ["Move " + w + " to the bottle." for w in less_distance_adjs_val]],
+             ["Move " + w + " to the bottle." for w in less_distance_adjs]],
+             # ["Move " + w + " from the bottle." for w in greater_distance_adjs_val],
+             # ["Move " + w + " to the bottle." for w in less_distance_adjs_val]],
         "distance_to_cube":
             # [["Move " + w + " from the cube." for w in comps] for comps in
             #  [greater_distance_adjs, less_distance_adjs, greater_distance_adjs_val, less_distance_adjs_val]]
             [["Move " + w + " from the cube." for w in greater_distance_adjs],
-             ["Move " + w + " to the cube." for w in less_distance_adjs],
-             ["Move " + w + " from the cube." for w in greater_distance_adjs_val],
-             ["Move " + w + " to the cube." for w in less_distance_adjs_val]]
+             ["Move " + w + " to the cube." for w in less_distance_adjs]],
+             # ["Move " + w + " from the cube." for w in greater_distance_adjs_val],
+             # ["Move " + w + " to the cube." for w in less_distance_adjs_val]]
     }
 
     if feature_name is None:
@@ -123,23 +132,26 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
         traj2_feature_values = [value_func[feature_name](traj2[t]) for t in range(horizon)]
 
         if np.mean(traj1_feature_values) < np.mean(traj2_feature_values):
-            if not validation:
-                comps = ori_commands[feature_name][0]
-            else:
-                comps = ori_commands[feature_name][2]
-            commands.extend(comps)
-            if augmented_comps is not None:
-                for comp in comps:
-                    commands.extend(augmented_comps[comp])
+            comps = ori_commands[feature_name][0]
         else:
-            if not validation:
-                comps = ori_commands[feature_name][1]
-            else:
-                comps = ori_commands[feature_name][3]
-            commands.extend(comps)
-            if augmented_comps is not None:
-                for comp in comps:
-                    commands.extend(augmented_comps[comp])
+            comps = ori_commands[feature_name][1]
+        if augmented_comps is not None:
+            for comp in comps:
+                if split == 'train':
+                    num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                    new_comps = augmented_comps[comp][: num_comps_train]
+                elif split == 'val':
+                    num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                    num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
+                    new_comps = augmented_comps[comp][num_comps_train: num_comps_train + num_comps]
+                elif split == 'test':
+                    num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                    num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
+                    new_comps = augmented_comps[comp][num_comps_train + num_comps:]
+                else:
+                    raise NotImplemented("Split not implemented")
+                commands.extend(new_comps)
+
     return commands
     # if feature_name == "gt_reward":
     #     traj1_feature_values = [gt_reward(traj1[t]) for t in range(horizon)]
@@ -245,7 +257,7 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
 # is equal to the sigmoid of the difference in the feature values.
 # IMPORTANT: User needs to have run calc_and_set_global_vars() at some point before this function.
 def generate_noisyaugmented_synthetic_comparisons_commands(traj1, traj2, n_duplicates, feature_name=None,
-                                                           augmented_comps=None, validation=False):
+                                                           augmented_comps=None, validation=False, split='train'):
     horizon = len(traj1)
     value_func = {
         "gt_reward": gt_reward,

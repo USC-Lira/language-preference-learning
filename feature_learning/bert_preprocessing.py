@@ -31,8 +31,7 @@ def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=Fals
     for nlcomp in nlcomps:
         nlcomp_indexes.append(id_map[nlcomp])
     if save:
-        np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes_{}.npy'.format(bert_model)), np.asarray(nlcomp_indexes))
-        json.dump(unique_nlcomps, open(os.path.join(nlcomp_dir, 'unique_nlcomps_{}.json'.format(bert_model)), 'w'))
+        np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes.npy'), np.asarray(nlcomp_indexes, dtype=np.int32))
 
     unbatched_input = unique_nlcomps
 

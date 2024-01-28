@@ -3,8 +3,9 @@
 # Example: bash scripts/data_preprocess.sh train
 for model in bert-tiny bert-mini bert-base
 do
-  python -m feature_learning.bert_preprocessing --id-mapping --data-dir=data/dataset/train --bert-model=$model &
-  python -m feature_learning.bert_preprocessing --id-mapping --data-dir=data/dataset/val --bert-model=$model &
+  python -m feature_learning.bert_preprocessing --id-mapping --data-dir=dataset_test/train --bert-model=$model &
+  python -m feature_learning.bert_preprocessing --id-mapping --data-dir=dataset_test/val --bert-model=$model
+  python -m feature_learning.bert_preprocessing --id-mapping --data-dir=dataset_test/test --bert-model=$model &
 done
 
 wait
