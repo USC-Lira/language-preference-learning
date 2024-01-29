@@ -269,19 +269,19 @@ def generate_noisyaugmented_synthetic_comparisons_commands(traj1, traj2, n_dupli
     ori_commands = {
         "gt_reward":
             [["Lift the cube " + w + "." for w in comps] for comps in
-             [greater_gtreward_adjs, less_gtreward_adjs, greater_gtreward_adjs_val, less_gtreward_adjs_val]],
+             [greater_gtreward_adjs, less_gtreward_adjs]],
         "speed":
             [["Move " + w + "." for w in comps] for comps in
-             [greater_speed_adjs, less_speed_adjs, greater_speed_adjs_val, less_speed_adjs_val]],
+             [greater_speed_adjs, less_speed_adjs]],
         "height":
             [["Move " + w + "." for w in comps] for comps in
-             [greater_height_adjs, less_height_adjs, greater_height_adjs_val, less_height_adjs_val]],
+             [greater_height_adjs, less_height_adjs]],
         "distance_to_bottle":
-            [["Move " + w + " from the bottle." for w in comps] for comps in
-             [greater_distance_adjs, less_distance_adjs, greater_distance_adjs_val, less_distance_adjs_val]],
+            [["Move " + w + " from the bottle." for w in greater_distance_adjs],
+             ["Move " + w + " to the bottle." for w in less_distance_adjs]],
         "distance_to_cube":
-            [["Move " + w + " from the cube." for w in comps] for comps in
-             [greater_distance_adjs, less_distance_adjs, greater_distance_adjs_val, less_distance_adjs_val]]
+            [["Move " + w + " from the cube." for w in greater_distance_adjs],
+             ["Move " + w + " to the cube." for w in less_distance_adjs]],
     }
 
     if feature_name is None:
@@ -301,15 +301,45 @@ def generate_noisyaugmented_synthetic_comparisons_commands(traj1, traj2, n_dupli
 
         commands = []
         for i in range(num_greater):
-            commands.extend(ori_commands[feature_name][0])
+            comps = ori_commands[feature_name][0]
             if augmented_comps is not None:
                 for comp in ori_commands[feature_name][0]:
-                    commands.extend(augmented_comps[comp])
+                    if split == 'train':
+                        num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                        new_comps = augmented_comps[comp][: num_comps_train]
+                    elif split == 'val':
+                        num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                        num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
+                        new_comps = augmented_comps[comp][num_comps_train: num_comps_train + num_comps]
+                    elif split == 'test':
+                        num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                        num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
+                        new_comps = augmented_comps[comp][num_comps_train + num_comps:]
+                    else:
+                        raise NotImplemented("Split not implemented")
+                    commands.extend(new_comps)
+            else:
+                commands.extend(comps)
         for i in range(num_lesser):
-            commands.extend(ori_commands[feature_name][1])
+            comps = ori_commands[feature_name][1]
             if augmented_comps is not None:
                 for comp in ori_commands[feature_name][1]:
-                    commands.extend(augmented_comps[comp])
+                    if split == 'train':
+                        num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                        new_comps = augmented_comps[comp][: num_comps_train]
+                    elif split == 'val':
+                        num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                        num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
+                        new_comps = augmented_comps[comp][num_comps_train: num_comps_train + num_comps]
+                    elif split == 'test':
+                        num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
+                        num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
+                        new_comps = augmented_comps[comp][num_comps_train + num_comps:]
+                    else:
+                        raise NotImplemented("Split not implemented")
+                    commands.extend(new_comps)
+            else:
+                commands.extend(comps)
         total_commands.extend(commands)
 
     return total_commands

@@ -123,6 +123,8 @@ def generate_and_save_dataset(trajs, output_dir, noise_augmentation=0, id_mappin
         os.makedirs(output_dir)
     print("SAVING TO:", output_dir)
 
+    np.save(os.path.join(output_dir, 'trajs.npy'), trajs)
+
     if id_mapping:
         # Change data type to int32 to save space
         traj_as = np.asarray(traj_as, dtype=np.int32)
@@ -251,13 +253,12 @@ if __name__ == '__main__':
     split_i = len(val_trajectories)
     train_trajectories, val_trajectories = train_trajectories[split_i:], train_trajectories[:split_i]
 
-    np.save(os.path.join(output_dir, 'train/trajs.npy'), train_trajectories)
-    np.save(os.path.join(output_dir, 'val/trajs.npy'), val_trajectories)
-    np.save(os.path.join(output_dir, 'test/trajs.npy'), test_trajectories)
+    generate_and_save_dataset(train_trajectories, os.path.join(output_dir, 'train'),
+                              noise_augmentation=noise_augmentation,
+                              split='train', id_mapping=args.id_mapping, lang_aug=True)
 
-    generate_and_save_dataset(train_trajectories, os.path.join(output_dir, 'train'), split='train',
-                              id_mapping=args.id_mapping, lang_aug=True)
     generate_and_save_dataset(val_trajectories, os.path.join(output_dir, 'val'), split='val',
                               id_mapping=args.id_mapping, lang_aug=True)
+
     generate_and_save_dataset(test_trajectories, os.path.join(output_dir, 'test'), split='test',
                               id_mapping=args.id_mapping, lang_aug=True)
