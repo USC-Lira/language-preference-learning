@@ -1,10 +1,10 @@
 import json
-from data.utils import greater_speed_adjs, greater_speed_adjs_val, greater_height_adjs, greater_height_adjs_val
-from data.utils import greater_gtreward_adjs, greater_gtreward_adjs_val, less_gtreward_adjs, less_gtreward_adjs_val
-from data.utils import greater_distance_adjs, greater_distance_adjs_val, less_distance_adjs, less_distance_adjs_val
-from data.utils import less_speed_adjs, less_speed_adjs_val, less_height_adjs, less_height_adjs_val
+from data.utils import greater_speed_adjs, greater_height_adjs
+from data.utils import greater_gtreward_adjs, less_gtreward_adjs
+from data.utils import greater_distance_adjs, less_distance_adjs
+from data.utils import less_speed_adjs, less_height_adjs
 
-with open('GPT_augmented_dataset.json', 'rb') as f:
+with open('GPT_augmented_comps.json', 'rb') as f:
     a = json.load(f)
 
 classified = {
@@ -30,12 +30,12 @@ less = {
     "distance_to_bottle": [],
 }
 
-greater_adjs = greater_speed_adjs + greater_speed_adjs_val + greater_height_adjs + greater_height_adjs_val + greater_gtreward_adjs + greater_gtreward_adjs_val + greater_distance_adjs + greater_distance_adjs_val
-less_adjs = less_speed_adjs + less_speed_adjs_val + less_height_adjs + less_height_adjs_val + less_gtreward_adjs + less_gtreward_adjs_val + less_distance_adjs + less_distance_adjs_val
+greater_adjs = greater_speed_adjs + greater_height_adjs + greater_gtreward_adjs + greater_distance_adjs
+less_adjs = less_speed_adjs + less_height_adjs + less_gtreward_adjs + less_distance_adjs
 
 for i in range(len(a)):
     flag = False
-    original_sentence = a[i][-1]
+    original_sentence = a[i][0]
     if "lift the cube" in original_sentence.lower():
         classified["gt_reward"].extend(a[i])
         flag = True
@@ -64,7 +64,7 @@ for i in range(len(a)):
             if adj in original_sentence:
                 less["distance_to_cube"].extend(a[i])
     else:
-        for adj in greater_speed_adjs + greater_speed_adjs_val + less_speed_adjs + less_speed_adjs_val:
+        for adj in greater_speed_adjs + less_speed_adjs:
             if adj in original_sentence:
                 classified["speed"].extend(a[i])
                 flag = True
@@ -74,7 +74,7 @@ for i in range(len(a)):
                 for adj_2 in less_adjs:
                     if adj_2 in original_sentence:
                         less["speed"].extend(a[i])
-        for adj in greater_height_adjs + greater_height_adjs_val + less_height_adjs + less_height_adjs_val:
+        for adj in greater_height_adjs + less_height_adjs:
             if adj in original_sentence:
                 classified["height"].extend(a[i])
                 flag = True
