@@ -111,7 +111,7 @@ def train(logger, args):
     else:
         lang_encoder = None
         tokenizer = None
-        feature_dim = 128
+        feature_dim = 16
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
@@ -203,7 +203,7 @@ def train(logger, args):
         ep_cosine_sim = AverageMeter('cosine_similarity')
         ep_norm_loss = AverageMeter('norm_loss')
 
-        with tqdm(total=len(train_loader), unit='batch') as pbar:
+        with tqdm(total=len(train_loader), unit='batch', position=0, leave=True) as pbar:
             pbar.set_description(f"Epoch {epoch + 1}/{args.epochs}")
             for train_data in train_loader:
                 # load it to the active device
@@ -232,16 +232,14 @@ def train(logger, args):
                 log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
 
                 # Norm loss, to make sure the encoded vectors are unit vectors
-                norm_loss = F.mse_loss(torch.norm(encoded_traj_a, dim=-1),
-                                       torch.ones(encoded_traj_a.shape[0]).to(device))
-                norm_loss += F.mse_loss(torch.norm(encoded_traj_b, dim=-1),
-                                        torch.ones(encoded_traj_b.shape[0]).to(device))
-                norm_loss += F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
+                norm_loss = F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
 
                 # norm loss
                 # By now, train_loss is a scalar.
                 # train_loss = reconstruction_loss + distance_loss
                 train_loss = reconstruction_loss + log_likelihood_loss
+                if args.add_norm_loss:
+                    train_loss += norm_loss
 
                 # compute accumulated gradients
                 train_loss.backward()
@@ -254,6 +252,7 @@ def train(logger, args):
                 ep_reconstruction_loss.update(reconstruction_loss.item(), train_data['traj_a'].shape[0])
                 ep_log_likelihood_loss.update(log_likelihood_loss.item(), train_data['traj_a'].shape[0])
                 ep_cosine_sim.update(cos_sim.item(), train_data['traj_a'].shape[0])
+                ep_norm_loss.update(norm_loss.item(), train_data['traj_a'].shape[0])
 
                 tqdm_postfix = {"log_likelihood_loss": ep_log_likelihood_loss.avg,
                                 "reconstruction_loss": ep_reconstruction_loss.avg,
@@ -348,6 +347,7 @@ if __name__ == '__main__':
                         help='whether to use casual attention in the transformer')
     parser.add_argument('--set-different-lr', action="store_true",
                         help='whether to set different learning rates for different layers')
+    parser.add_argument('--add-norm-loss', action="store_true", help='whether to add norm loss to the total loss')
 
     args = parser.parse_args()
 
@@ -355,6 +355,7 @@ if __name__ == '__main__':
     exp_dir = os.path.join('exp', timeStamped(args.exp_name))
     os.makedirs(exp_dir, exist_ok=True)
     logger = create_logger(exp_dir)
+    args.save_dir = exp_dir
 
     if not args.use_bert_encoder:
         # Linear model: one-stage training

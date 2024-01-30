@@ -68,12 +68,53 @@ def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, rewar
     return nlcomp
 
 
-def improve_trajectory(args):
-    trajs = np.load('data/dataset/val/trajs.npy')
-    nlcomps = json.load(open(f'data/dataset/val/unique_nlcomps_{args.bert_model}.json', 'rb'))
-    nlcomps_bert_embeds = np.load(f'data/dataset/val/unique_nlcomps_{args.bert_model}.npy')
-    greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
-    less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
+def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, less_nlcomps, traj_embeds, lang_embeds,
+                       model, device, tokenizer, lang_encoder, args, use_softmax=False):
+    reward_values = np.dot(feature_values, reward_func)
+    optimal_traj_idx = np.argmax(reward_values)
+    optimal_traj_value = reward_values[optimal_traj_idx]
+    curr_traj_idx = np.argmin(reward_values)
+    curr_traj_value = reward_values[curr_traj_idx]
+    if args.debug:
+        print(f'Optimal trajectory: {optimal_traj_idx}, optimal value: {optimal_traj_value}\n')
+        print(f'Initial trajectory: {curr_traj_idx}, initial value: {curr_traj_value}\n')
+
+    optimal_reached = False
+    traj_values = [curr_traj_value]
+    for i in range(args.iterations):
+        if curr_traj_value == optimal_traj_value:
+            optimal_reached = True
+            traj_values.extend([optimal_traj_value for _ in range(args.iterations - i)])
+            break
+
+        # Find the nearest language embedding to the optimal trajectory embedding
+        # lang_embed, lang_idx = get_best_lang(traj_embeds[optimal_traj_idx], traj_embeds[curr_traj_idx], lang_embeds)
+        # nlcomp = nlcomps[lang_idx]
+        nlcomp = get_lang_feedback(feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func,
+                                   less_idx, greater_nlcomps, less_nlcomps, softmax=use_softmax)
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
+                                    bert_model=lang_encoder)
+        next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds)
+        next_traj_value = reward_values[next_traj_idx]
+        traj_values.append(next_traj_value)
+
+        curr_traj_idx = next_traj_idx
+        curr_traj_value = next_traj_value
+
+        if args.debug:
+            print(f'Iteration {i}')
+            print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
+            print(f'Language comparison: {nlcomp}\n')
+
+    return optimal_reached, optimal_traj_value, traj_values
+
+
+def main(args):
+    trajs = np.load(os.path.join(args.data_dir, 'test/trajs.npy'))
+    nlcomps = json.load(open(os.path.join(args.data_dir, 'test/unique_nlcomps.json'), 'rb'))
+    nlcomps_bert_embeds = np.load(os.path.join(args.data_dir, f'test/unique_nlcomps_{args.bert_model}.npy'))
+    greater_nlcomps = json.load(open(os.path.join(args.data_dir, '../greater_nlcomps.json'), 'rb'))
+    less_nlcomps = json.load(open(os.path.join(args.data_dir, '../less_nlcomps.json'), 'rb'))
 
     # Load the model
     if args.use_bert_encoder:
@@ -83,7 +124,7 @@ def improve_trajectory(args):
     else:
         lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
         tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        feature_dim = 16
+        feature_dim = 128
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
@@ -150,47 +191,22 @@ def improve_trajectory(args):
     for i in less_idx:
         feature_values[:, i] = 1 - feature_values[:, i]
 
-    reward_values = np.dot(feature_values, reward_func)
-    optimal_traj_idx = np.argmax(reward_values)
-    optimal_traj_value = reward_values[optimal_traj_idx]
-    curr_traj_idx = np.argmin(reward_values)
-    curr_traj_value = reward_values[curr_traj_idx]
-    if args.debug:
-        print(f'Optimal trajectory: {optimal_traj_idx}, optimal value: {optimal_traj_value}\n')
-        print(f'Initial trajectory: {curr_traj_idx}, initial value: {curr_traj_value}\n')
+    optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values, less_idx,
+                                                                           greater_nlcomps, less_nlcomps, traj_embeds,
+                                                                           lang_embeds, model, device, tokenizer,
+                                                                           lang_encoder, args, use_softmax=False)
+    optimal_reached, optimal_traj_value_softmax, traj_values_softmax = improve_trajectory(reward_func, feature_values, less_idx,
+                                                                            greater_nlcomps, less_nlcomps, traj_embeds,
+                                                                            lang_embeds, model, device, tokenizer,
+                                                                            lang_encoder, args, use_softmax=True)
 
-    optimal_reached = False
-    traj_values = [curr_traj_value]
-    for i in range(args.iterations):
-        if curr_traj_value == optimal_traj_value:
-            optimal_reached = True
-            traj_values.extend([optimal_traj_value for _ in range(args.iterations - i)])
-            break
-
-        # Find the nearest language embedding to the optimal trajectory embedding
-        # lang_embed, lang_idx = get_best_lang(traj_embeds[optimal_traj_idx], traj_embeds[curr_traj_idx], lang_embeds)
-        # nlcomp = nlcomps[lang_idx]
-        nlcomp = get_lang_feedback(feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func, less_idx,
-                                   greater_nlcomps, less_nlcomps, softmax=True)
-        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=True, bert_model=lang_encoder)
-        next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds)
-        next_traj_value = reward_values[next_traj_idx]
-        traj_values.append(next_traj_value)
-
-        curr_traj_idx = next_traj_idx
-        curr_traj_value = next_traj_value
-
-        if args.debug:
-            print(f'Iteration {i}')
-            print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
-            print(f'Language comparison: {nlcomp}\n')
-
-    return optimal_reached, optimal_traj_value, traj_values
+    return optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
+    parser.add_argument('--data-dir', type=str, default='data')
     parser.add_argument('--use-bert-encoder', action='store_true')
     parser.add_argument('--bert-model', type=str, default='bert-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
@@ -201,25 +217,40 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
 
-    optimal_traj_values = []
-    all_traj_values = []
-    for _ in range(100):
-        optimal_reached, optimal_traj_value, traj_values = improve_trajectory(args)
-        optimal_traj_values.append(optimal_traj_value)
-        all_traj_values.append(traj_values)
-        print(len(all_traj_values))
+    exp_name = args.model_dir.split('/')[-1]
+    optimal_traj_values_softmax = []
+    all_traj_values_softmax = []
+    optimal_traj_values_argmax = []
+    all_traj_values_argmax = []
+    for i in range(100):
+        if i % 10 == 0:
+            print(f'Attempt {i}')
+        optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax = main(args)
+        optimal_traj_values_softmax.append(optimal_traj_value_softmax)
+        all_traj_values_softmax.append(traj_values_softmax)
+        optimal_traj_values_argmax.append(optimal_traj_value_argmax)
+        all_traj_values_argmax.append(traj_values_argmax)
 
-    all_traj_values = np.array(all_traj_values)
-    np.save('model_analysis/all_traj_values_softmax.npy', all_traj_values)
-    optimal_traj_values = np.array(optimal_traj_values)
-    np.save('model_analysis/optimal_traj_values_softmax.npy', optimal_traj_values)
-    plt.plot(np.mean(all_traj_values, axis=0), label='Current Trajectory')
-    # Draw optimal trajecotry values as a dashed horizontal line
-    plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
-    plt.xlabel('Iteration')
-    plt.ylabel('Avg. Reward')
-    plt.title('Average Reward vs. Iteration (Val Set)')
-    plt.legend()
+    all_traj_values_argmax = np.array(all_traj_values_argmax)
+    all_traj_values_softmax = np.array(all_traj_values_softmax)
+    optimal_traj_values_argmax = np.array(optimal_traj_values_argmax)
+    optimal_traj_values_softmax = np.array(optimal_traj_values_softmax)
 
-    plt.savefig('model_analysis/improve_traj.png')
-    plt.show()
+    save_dir = os.path.join('model_analysis', exp_name)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    np.save(f'{save_dir}/all_traj_values_softmax.npy', all_traj_values_softmax)
+    np.save(f'{save_dir}/optimal_traj_values_softmax.npy', optimal_traj_values_softmax)
+    np.save(f'{save_dir}/all_traj_values_argmax.npy', all_traj_values_argmax)
+    np.save(f'{save_dir}/optimal_traj_values_argmax.npy', optimal_traj_values_argmax)
+    # plt.plot(np.mean(all_traj_values, axis=0), label='Improved Trajectory')
+    # # Draw optimal trajecotry values as a dashed horizontal line
+    # plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Avg. Reward')
+    # plt.title('Average Reward vs. Iteration (Test Set)')
+    # plt.legend()
+    #
+    # plt.savefig(f'model_analysis/{exp_name}/improve_traj_softmax.png')
+    # plt.show()

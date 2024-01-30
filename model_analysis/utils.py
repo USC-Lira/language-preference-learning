@@ -22,7 +22,8 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, tokeni
             token_ids += [tokenizer.pad_token_id] * padding_length
             token_ids = torch.from_numpy(np.asarray(token_ids)).unsqueeze(0).to(device)
             attention_mask = torch.from_numpy(np.asarray(attention_mask)).unsqueeze(0).to(device)
-            lang_embed = model.lang_encoder(token_ids, attention_mask=attention_mask).detach().cpu().numpy()
+            hidden_states = model.lang_encoder(token_ids, attention_mask=attention_mask).last_hidden_state
+            lang_embed = torch.mean(hidden_states, dim=1, keepdim=False).detach().cpu().numpy()
             lang_embeds.append(lang_embed)
 
     else:
@@ -38,7 +39,7 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, tokeni
 
 
 def get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=False, bert_model=None):
-    if use_bert_encoder:
+    if not use_bert_encoder:
         assert bert_model is not None
         inputs = tokenizer(nlcomp, return_tensors="pt")
         bert_output = bert_model(**inputs)
@@ -59,6 +60,7 @@ def get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=False, ber
         token_ids += [tokenizer.pad_token_id] * padding_length
         token_ids = torch.from_numpy(np.asarray(token_ids)).unsqueeze(0).to(device)
         attention_mask = torch.from_numpy(np.asarray(attention_mask)).unsqueeze(0).to(device)
-        lang_embed = model.lang_encoder(token_ids, attention_mask=attention_mask).detach().cpu().numpy()
+        hidden_states = model.lang_encoder(token_ids, attention_mask=attention_mask).last_hidden_state
+        lang_embed = torch.mean(hidden_states, dim=1, keepdim=False).squeeze(0).detach().cpu().numpy()
 
     return lang_embed

@@ -61,12 +61,12 @@ def get_feature_class(nlcomp, classified_nlcomps):
     return value_func, feature_name
 
 
-def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hidden_dim, preprocessed_nlcomps,
-         old_model=False, use_traj_transformer=False, debug=False):
+def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hidden_dim, preprocessed_nlcomps,
+         old_model=False, traj_encoder='mlp', debug=False):
     # Load the val trajectories and language comparisons first
-    trajs = np.load('data/dataset/val/trajs.npy')
-    nlcomps = json.load(open(f'data/dataset/val/unique_nlcomps_{bert_model}.json', 'rb'))
-    nlcomps_bert_embeds = np.load(f'data/dataset/val/unique_nlcomps_{bert_model}.npy')
+    trajs = np.load(f'{data_dir}/test/trajs.npy')
+    nlcomps = json.load(open(f'{data_dir}/test/unique_nlcomps.json', 'rb'))
+    nlcomps_bert_embeds = np.load(f'{data_dir}/test/unique_nlcomps_{bert_model}.npy')
     classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
     greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
     less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
@@ -80,11 +80,12 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
     else:
         lang_encoder = None
         tokenizer = None
-        feature_dim = 16
+        feature_dim = 128
+
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[bert_model],
-                              use_bert_encoder=use_bert_encoder, use_traj_transformer=use_traj_transformer)
+                              use_bert_encoder=use_bert_encoder, traj_encoder=traj_encoder)
 
     state_dict = torch.load(os.path.join(model_dir, 'best_model_state_dict.pth'))
 
@@ -108,7 +109,7 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
     # Get the nearest trajectory embedding given the language embedding
     total = 0
     correct = 0
-    log_likelihoods = []
+    improvements = []
     for traj_idx in range(len(trajs)):
         traj = trajs[traj_idx]
         traj_embed = traj_embeds[traj_idx]
@@ -136,24 +137,24 @@ def main(model_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hi
                 print(
                     f"{nlcomp}, {greater}\n{feature_name}, traj1: {np.mean(traj1_feature_values)}, traj2: {np.mean(traj2_feature_values)}, {correct}")
 
-            # Get the log probability of the language comparison given the trajectory
-            nearest_traj_embed = traj_embeds[nearest_traj_idx]
-            dot_prod = np.dot(nearest_traj_embed - traj_embed, lang_embed)
-            log_likelihood = np.log(1 / (1 + np.exp(-dot_prod)))
-            log_likelihoods.append(log_likelihood)
+            # how much the trajectory gets improved on the feature
+            improvement = (np.mean(traj2_feature_values) - np.mean(traj1_feature_values)) / np.mean(traj1_feature_values)
+            improvements.append(improvement)
 
-    print(f"Correct: {correct}/{total} ({correct / total}), Avg. log likelihood: {np.mean(log_likelihoods)}")
+    print(f"Correct: {correct}/{total} ({correct / total}), Avg. Improvement: {np.mean(improvements)}%")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
+    parser.add_argument('--data-dir', type=str, default='data')
     parser.add_argument('--use-bert-encoder', action='store_true')
     parser.add_argument('--bert-model', type=str, default='bert-base-uncased')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
     parser.add_argument('--preprocessed-nlcomps', action='store_true')
     parser.add_argument('--old-model', action='store_true')
+    parser.add_argument('--traj_encoder', type=str, default='mlp')
     args = parser.parse_args()
     main(args.model_dir, args.use_bert_encoder, args.bert_model, args.encoder_hidden_dim, args.decoder_hidden_dim,
-         args.preprocessed_nlcomps, args.old_model, use_traj_transformer=False)
+         args.preprocessed_nlcomps, args.old_model, traj_encoder=args.traj_encoder)
