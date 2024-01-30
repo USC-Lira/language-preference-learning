@@ -64,11 +64,7 @@ def evaluate(model, data_loader, device):
             reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(data['traj_b'], dim=-2))
             total_reconstruction_loss += reconstruction_loss.detach().cpu().item()
 
-            norm_loss = F.mse_loss(torch.norm(encoded_traj_a, dim=-1),
-                                   torch.ones(encoded_traj_a.shape[0]).to(device))
-            norm_loss += F.mse_loss(torch.norm(encoded_traj_b, dim=-1),
-                                    torch.ones(encoded_traj_b.shape[0]).to(device))
-            norm_loss += F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
+            norm_loss = F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
             total_norm_loss += norm_loss.detach().cpu().item()
 
             cos_sim = torch.mean(F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang))
@@ -111,7 +107,7 @@ def train(logger, args):
     else:
         lang_encoder = None
         tokenizer = None
-        feature_dim = 16
+        feature_dim = 128
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
@@ -370,5 +366,6 @@ if __name__ == '__main__':
         # Stage 2: co-finetune BERT and the trajectory encoder
         logger.info('\n------------------ Co-finetune BERT ------------------')
         args.finetune_bert = True
+        args.lr = 1e-4
         train(logger, args)
 
