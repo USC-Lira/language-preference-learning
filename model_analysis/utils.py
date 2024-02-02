@@ -23,7 +23,7 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, tokeni
             token_ids = torch.from_numpy(np.asarray(token_ids)).unsqueeze(0).to(device)
             attention_mask = torch.from_numpy(np.asarray(attention_mask)).unsqueeze(0).to(device)
             hidden_states = model.lang_encoder(token_ids, attention_mask=attention_mask).last_hidden_state
-            lang_embed = torch.mean(hidden_states, dim=1, keepdim=False).detach().cpu().numpy()
+            lang_embed = torch.mean(hidden_states, dim=1, keepdim=False).squeeze(0).detach().cpu().numpy()
             lang_embeds.append(lang_embed)
 
     else:

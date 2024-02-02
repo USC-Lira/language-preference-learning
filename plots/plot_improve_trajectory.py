@@ -7,11 +7,13 @@ rcParams['font.size'] = 40
 
 import matplotlib.pyplot as plt
 
-all_traj_rewards_softmax = np.load('../model_analysis/finetune-bert-tiny-newdata-aug-lr0.0001/all_traj_values_softmax.npy')
-optimal_traj_rewards_softmax = np.load('../model_analysis/finetune-bert-tiny-newdata-aug-lr0.0001/optimal_traj_values_softmax.npy')
+exp_name = 'finetune-bert-tiny-newdata-aug-norm'
 
-all_traj_rewards_argmax = np.load('../model_analysis/finetune-bert-tiny-newdata-aug-lr0.0001/all_traj_values_argmax.npy')
-optimal_traj_rewards_argmax = np.load('../model_analysis/finetune-bert-tiny-newdata-aug-lr0.0001/optimal_traj_values_argmax.npy')
+all_traj_rewards_softmax = np.load(f'../model_analysis/{exp_name}/all_traj_values_softmax.npy')
+optimal_traj_rewards_softmax = np.load(f'../model_analysis/{exp_name}/optimal_traj_values_softmax.npy')
+
+all_traj_rewards_argmax = np.load(f'../model_analysis/{exp_name}/all_traj_values_argmax.npy')
+optimal_traj_rewards_argmax = np.load(f'../model_analysis/{exp_name}/optimal_traj_values_argmax.npy')
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(17.5, 8))
 
@@ -53,5 +55,5 @@ handles, labels = ax1.get_legend_handles_labels()
 # fig.legend(handles, labels, loc='upper center', ncols=2, prop={'size': 20})
 plt.tight_layout(pad=2.0)
 plt.subplots_adjust(wspace=0.25, hspace=0.2)
-plt.savefig('finetune_improve_traj.pdf', dpi=300)
+plt.savefig(f'../model_analysis/{exp_name}/finetune_improve_traj.pdf', dpi=300)
 plt.show()

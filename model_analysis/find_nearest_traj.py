@@ -124,21 +124,25 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
 
             # If the language comparison is greater, then the feature value of traj2 should be greater than traj1
             # vice versa for less
-            if nlcomp in greater_nlcomps:
+            if nlcomp in greater_nlcomps[feature_name]:
                 correct += np.mean(traj1_feature_values) <= np.mean(traj2_feature_values)
                 greater = True
-            elif nlcomp in less_nlcomps:
+                improvement = (np.mean(traj2_feature_values) - np.mean(traj1_feature_values)) / np.mean(
+                    traj1_feature_values)
+            elif nlcomp in less_nlcomps[feature_name]:
                 correct += np.mean(traj1_feature_values) >= np.mean(traj2_feature_values)
                 greater = False
+                improvement = (np.mean(traj1_feature_values) - np.mean(traj2_feature_values)) / np.mean(
+                    traj1_feature_values)
             else:
-                raise ValueError(f"NL comparison {nlcomp} not found in greater or less NL comparisons")
+                print(nlcomp)
+                raise ValueError(f"{nlcomp} not found in greater or less NL comparisons")
             total += 1
             if debug:
                 print(
                     f"{nlcomp}, {greater}\n{feature_name}, traj1: {np.mean(traj1_feature_values)}, traj2: {np.mean(traj2_feature_values)}, {correct}")
 
             # how much the trajectory gets improved on the feature
-            improvement = (np.mean(traj2_feature_values) - np.mean(traj1_feature_values)) / np.mean(traj1_feature_values)
             improvements.append(improvement)
 
     print(f"Correct: {correct}/{total} ({correct / total}), Avg. Improvement: {np.mean(improvements)}%")
@@ -156,5 +160,6 @@ if __name__ == '__main__':
     parser.add_argument('--old-model', action='store_true')
     parser.add_argument('--traj_encoder', type=str, default='mlp')
     args = parser.parse_args()
-    main(args.model_dir, args.use_bert_encoder, args.bert_model, args.encoder_hidden_dim, args.decoder_hidden_dim,
+    main(args.model_dir, args.data_dir, args.use_bert_encoder, args.bert_model,
+         args.encoder_hidden_dim, args.decoder_hidden_dim,
          args.preprocessed_nlcomps, args.old_model, traj_encoder=args.traj_encoder)
