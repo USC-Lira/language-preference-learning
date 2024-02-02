@@ -26,15 +26,16 @@ class RewardFunc(nn.Module):
 
     def forward(self, x):
         return self.linear(x)
-    
+
+
 class Loss(nn.Module):
     def __init__(self):
         super(Loss, self).__init__()
 
     def forward(self, traj_cur, traj_opt, lang_feedback):
         # neg dot product
-        dot_product = torch.dot(lang_feedback, (traj_opt - traj_cur))
-        return (-dot_product)
+        dot_product = torch.exp(torch.dot(lang_feedback, (traj_opt - traj_cur)))
+        return -dot_product
 
 
 def run(args):
@@ -42,13 +43,11 @@ def run(args):
     # Load the val trajectories and language comparisons first
     trajs = np.load(f'{args.data_dir}/val/trajs.npy')
     nlcomps = json.load(open(f'{args.data_dir}/val/unique_nlcomps.json', 'rb'))
-    nlcomps_bert_embeds = np.load(f'{args.data_dir}/val/unique_nlcomps_{bert_model}.npy')
+    nlcomps_bert_embeds = np.load(f'{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy')
     classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
     greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
     less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    
 
     # Current learned language encoder
     # Load the model
@@ -62,42 +61,39 @@ def run(args):
         feature_dim = 128
 
     model = NLTrajAutoencoder(
-                    encoder_hidden_dim=args.encoder_hidden_dim, 
-                    feature_dim=feature_dim,
-                    decoder_hidden_dim=args.decoder_hidden_dim, 
-                    lang_encoder=lang_encoder,
-                    preprocessed_nlcomps=args.preprocessed_nlcomps,
-                    bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
-                    use_bert_encoder=args.use_bert_encoder, 
-                    traj_encoder=args.traj_encoder,
-                    use_cnn_in_transformer=args.use_cnn_in_transformer,
-                    use_casual_attention=args.use_casual_attention
+        encoder_hidden_dim=args.encoder_hidden_dim,
+        feature_dim=feature_dim,
+        decoder_hidden_dim=args.decoder_hidden_dim,
+        lang_encoder=lang_encoder,
+        preprocessed_nlcomps=args.preprocessed_nlcomps,
+        bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
+        use_bert_encoder=args.use_bert_encoder,
+        traj_encoder=args.traj_encoder,
+        use_cnn_in_transformer=args.use_cnn_in_transformer,
+        use_casual_attention=args.use_casual_attention
     )
     state_dict = torch.load(os.path.join(args.model_dir, 'best_model_state_dict.pth'))
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
 
-        
     # random init both reward functions (learned, true)
-    learned_reward = RewardFunc(128, 128)
-    true_reward = RewardFunc(128, 128)
-    learned_reward = initialize_rewards(5)
+    learned_reward = RewardFunc(128, 1)
     true_reward = initialize_rewards(5)
     # nn.init.normal_(learned_reward.linear.weight, mean=0, std=0.01)
-    
 
-     # loss func
+    # loss func
     criteria = Loss()
     optimizer = torch.optim.Adam(learned_reward.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    
-    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer, nlcomps_bert_embeds)
+
+    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
+                                                    nlcomps_bert_embeds)
 
     # Find the optimal trajectory given the reward function
     feature_values = np.array([get_feature_value(traj) for traj in trajs])
     # Normalize feature values
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
-                np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
+            np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
 
     np.random.seed(args.seed)
 
@@ -107,22 +103,20 @@ def run(args):
         traj_cur = trajs[rand]
 
         # use current learned encoder for traj to get features
-        # TODO: how to get features?
+        # TODO: how to get features? model.traj_encoder(traj_cur)
         feature_values_cur = feature_values[rand]
 
         # Use current learned reward func to get language feedback
-            # TODO: get_lang_feedback given the feature_values_cur
+        # TODO: get_lang_feedback given the true reward function
 
         # Based on language feedback, use learned lang encoder to get the feature in that feedback (select from set)
-            # TODO: ??
-
+        # TODO: get language features: model.lang_encoder(lang_feedback)
 
         # Select optimal traj based on current reward func
-            # TODO: argmax...?
-
+        # TODO: argmax...?
 
         # Compute dot product of lang(traj_opt - traj_cur)
-            # Minimize the negative dot product (loss)!
+        # Minimize the negative dot product (loss)!
         loss = criteria(traj_cur, traj_opt, lang_feedback)
 
         # Backprop
@@ -153,5 +147,5 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='')
     parser.add_argument('--num_iterations', type=int, default=10, help='')
 
-    args=parser.parse_args()
+    args = parser.parse_args()
     run(args)
