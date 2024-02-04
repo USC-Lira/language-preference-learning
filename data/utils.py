@@ -18,12 +18,16 @@ import numpy as np
 # less_distance_adjs_val = ["less distant"]
 greater_gtreward_adjs = ["better", "more successfully"]
 less_gtreward_adjs = ["worse", "not as well"]
-greater_speed_adjs = ["faster", "quicker", "swifter", "at a higher speed"]
-less_speed_adjs = ["slower", "more moderate", "more sluggish", "at a lower speed"]
-greater_height_adjs = ["higher", "taller", "at a greater height"]
-less_height_adjs = ["lower", "shorter", "at a lesser height"]
+greater_speed_adjs = ["faster", "quicker", "swifter", "at a higher speed", "hasten", "quickly", "speed up"]
+less_speed_adjs = ["slower", "more moderate", "more sluggish", "at a lower speed", "slow"]
+greater_height_adjs = ["higher", "taller", "at a greater height", "ascend", "elevate"]
+less_height_adjs = ["lower", "shorter", "at a lesser height", "descend"]
 greater_distance_adjs = ["further", "farther", "more distant"]
 less_distance_adjs = ["closer", "nearer", "more nearby"]
+
+height_nouns = ["position", "stature", "height", "movement"]
+speed_nouns = ["speed", "pace", "movement", "advance"]
+distance_nouns = ["distance"]
 
 GT_REWARD_MEAN = None
 GT_REWARD_STD = None

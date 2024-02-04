@@ -15,7 +15,7 @@ from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.learn_features import load_data
 from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM, create_logger, AverageMeter
 from model_analysis.utils import get_traj_lang_embeds
-from model_analysis.improve_trajectory import initialize_reward, get_feature_value
+from model_analysis.improve_trajectory import initialize_reward, get_feature_value, get_lang_feedback
 
 
 # learned and true reward func (linear for now)
@@ -40,15 +40,25 @@ class Loss(nn.Module):
 
 def run(args):
     # data
-    # Load the val trajectories and language comparisons first
-    trajs = np.load(f'{args.data_dir}/val/trajs.npy')
-    nlcomps = json.load(open(f'{args.data_dir}/val/unique_nlcomps.json', 'rb'))
-    nlcomps_bert_embeds = np.load(f'{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy')
+    # Load the test trajectories and language comparisons first
+    trajs = np.load(f'{args.data_dir}/test/trajs.npy')
+    nlcomps = json.load(open(f'{args.data_dir}/test/unique_nlcomps.json', 'rb'))
+    nlcomps_bert_embeds = np.load(f'{args.data_dir}/test/unique_nlcomps_{args.bert_model}.npy')
     classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
     # TODO: need to run categorize.py 
     greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
     less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    less_idx = np.random.choice(5, size=2, replace=False)
+    for i in less_idx:
+        feature_values[:, i] = 1 - feature_values[:, i]
+
+    # split trajs into arg.num_batches batches
+        # test size = 22 (172 train, 22 val)
+        # possible batch sizes: 1, 2, 11, 22
+    trajs = np.split(trajs, args.num_batches)
+
 
     # Current learned language encoder
     # Load the model
@@ -81,8 +91,7 @@ def run(args):
     # random init both reward functions (learned, true)
     # TODO: random init both learned and true?
     learned_reward = RewardFunc(128, 1)
-    true_reward = initialize_rewards(5)
-    # nn.init.normal_(learned_reward.linear.weight, mean=0, std=0.01)
+    true_reward = initialize_reward(5)
 
     # loss func
     criteria = Loss()
@@ -96,52 +105,57 @@ def run(args):
     # Normalize feature values
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
             np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
-    # TODO: is this the optimal traj..? do the dimensions even align
-    true_traj_opt_i = np.argmax(np.dot(feature_values, true_reward.numpy().T))
+    # split into batches
+    feature_values = np.split(feature_values, args.num_batches)
+
+    
 
     np.random.seed(args.seed)
 
-    for i in range(args.num_iterations):
-        # random select traj
-        rand = np.random.randint(0, len(trajs))
-        traj_cur = trajs[rand]
 
-        # use current learned encoder for traj to get features
-        # TODO: dim 5?
-        # TODO: diff between this and feature_values[rand]?
-        traj_cur_embed = model.traj_encoder(traj_cur) 
+    for batch_num, batch in enumerate(trajs):
+        # random select traj in current batch
+        rand = np.random.randint(0, len(batch))
+        traj_cur = batch[rand]
 
-        # Use true reward func to get language feedback (select from set)
-        # get_lang_feedback given the true reward function
-        less_idx = np.random.choice(5, size=2, replace=False)
-        for i in less_idx:
-            feature_values[:, i] = 1 - feature_values[:, i]
-        nlcomp = get_lang_feedback(feature_values[true_traj_opt_i], feature_values[rand], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
+        # TODO: is this the optimal traj..? do the dimensions even align
+        true_traj_opt_i = np.argmax(np.dot(feature_values[batch_num], true_reward.numpy().T))
 
-        # Based on language feedback, use learned lang encoder to get the feature in that feedback
-        nlcomp_feature = model.lang_encoder(nlcomp)
+        for i in range(args.num_iterations):
+            # use current learned encoder for traj to get features
+            # TODO: dim 5?
+            # TODO: diff between this and feature_values[rand]?
+            traj_cur_embed = model.traj_encoder(traj_cur) 
 
-        # Select optimal traj based on current reward func
-        traj_opt = trajs[np.argmax(np.dot(feature_values, learned_reward.numpy().T))]
-        traj_opt_embed = model.traj_encoder(traj_opt) 
+            # Use true reward func to get language feedback (select from set)
+            nlcomp = get_lang_feedback(feature_values[batch_num][true_traj_opt_i], feature_values[batch_num][rand], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
 
-        # Compute dot product of lang(traj_opt - traj_cur)
-        # Minimize the negative dot product (loss)!
-        loss = criteria(traj_cur_embed, traj_opt_embed, nlcomp_feature)
-        # Backprop
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # Based on language feedback, use learned lang encoder to get the feature in that feedback
+            nlcomp_feature = model.lang_encoder(nlcomp)
 
-        # log likelihood of random pair of trajs
-        rand = np.random.randint(0, len(trajs))
-        traj_a = trajs[rand]
-        traj_a_embed = model.traj_encoder(traj_a)
-        rand = np.random.randint(0, len(trajs))
-        traj_b = trajs[rand]
-        traj_b_embed = model.traj_encoder(traj_b)
+            # Select optimal traj based on current reward func
+            traj_opt = trajs[batch_num][np.argmax(np.dot(feature_values[batch_num], learned_reward.numpy().T))]
+            traj_opt_embed = model.traj_encoder(traj_opt) 
 
-        log_likelihood = nn.functional.logsigmoid(traj_b_embed - traj_a_embed)
+            # Compute dot product of lang(traj_opt - traj_cur)
+            # Minimize the negative dot product (loss)!
+            loss = criteria(traj_cur_embed, traj_opt_embed, nlcomp_feature)
+            # Backprop
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # log likelihood of random pair of trajs
+            # TODO: Erdem need clarification!!
+            
+            # rand = np.random.randint(0, len(trajs))
+            # traj_a = trajs[rand]
+            # traj_a_embed = model.traj_encoder(traj_a)
+            # rand = np.random.randint(0, len(trajs))
+            # traj_b = trajs[rand]
+            # traj_b_embed = model.traj_encoder(traj_b)
+
+            # log_likelihood = nn.functional.logsigmoid(traj_b_embed - traj_a_embed)
 
 
 if __name__ == "__main__":

@@ -3,8 +3,9 @@ from data.utils import greater_speed_adjs, greater_height_adjs
 from data.utils import greater_gtreward_adjs, less_gtreward_adjs
 from data.utils import greater_distance_adjs, less_distance_adjs
 from data.utils import less_speed_adjs, less_height_adjs
+from data.utils import height_nouns, speed_nouns, distance_nouns
 
-with open('GPT_augmented_comps.json', 'rb') as f:
+with open('/home/mdjun/language-preference-learning/data/GPT_augmented_dataset.json', 'rb') as f:
     a = json.load(f)
 
 classified = {
@@ -64,7 +65,7 @@ for i in range(len(a)):
             if adj in original_sentence:
                 less["distance_to_cube"].extend(a[i])
     else:
-        for adj in greater_speed_adjs + less_speed_adjs:
+        for adj in greater_speed_adjs + less_speed_adjs + speed_nouns:
             if adj in original_sentence:
                 classified["speed"].extend(a[i])
                 flag = True
@@ -74,7 +75,7 @@ for i in range(len(a)):
                 for adj_2 in less_adjs:
                     if adj_2 in original_sentence:
                         less["speed"].extend(a[i])
-        for adj in greater_height_adjs + less_height_adjs:
+        for adj in greater_height_adjs + less_height_adjs + height_nouns:
             if adj in original_sentence:
                 classified["height"].extend(a[i])
                 flag = True
