@@ -18,7 +18,7 @@ from model_analysis.utils import get_traj_lang_embeds
 from model_analysis.improve_trajectory import initialize_reward, get_feature_value
 
 
-# learned and true reward func
+# learned and true reward func (linear for now)
 class RewardFunc(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(RewardFunc, self).__init__()
@@ -45,6 +45,7 @@ def run(args):
     nlcomps = json.load(open(f'{args.data_dir}/val/unique_nlcomps.json', 'rb'))
     nlcomps_bert_embeds = np.load(f'{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy')
     classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
+    # TODO: need to run categorize.py 
     greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
     less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -78,6 +79,7 @@ def run(args):
     model.eval()
 
     # random init both reward functions (learned, true)
+    # TODO: random init both learned and true?
     learned_reward = RewardFunc(128, 1)
     true_reward = initialize_rewards(5)
     # nn.init.normal_(learned_reward.linear.weight, mean=0, std=0.01)
@@ -94,6 +96,8 @@ def run(args):
     # Normalize feature values
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
             np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
+    # TODO: is this the optimal traj..? do the dimensions even align
+    true_traj_opt_i = np.argmax(np.dot(feature_values, true_reward.numpy().T))
 
     np.random.seed(args.seed)
 
@@ -103,28 +107,33 @@ def run(args):
         traj_cur = trajs[rand]
 
         # use current learned encoder for traj to get features
-        # TODO: how to get features? model.traj_encoder(traj_cur)
-        feature_values_cur = feature_values[rand]
+        # TODO: dim 5?
+        # TODO: diff between this and feature_values[rand]?
+        traj_cur_embed = model.traj_encoder(traj_cur) 
 
-        # Use current learned reward func to get language feedback
-        # TODO: get_lang_feedback given the true reward function
+        # Use true reward func to get language feedback (select from set)
+        # get_lang_feedback given the true reward function
+        less_idx = np.random.choice(5, size=2, replace=False)
+        for i in less_idx:
+            feature_values[:, i] = 1 - feature_values[:, i]
+        nlcomp = get_lang_feedback(feature_values[true_traj_opt_i], feature_values[rand], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
 
-        # Based on language feedback, use learned lang encoder to get the feature in that feedback (select from set)
-        # TODO: get language features: model.lang_encoder(lang_feedback)
+        # Based on language feedback, use learned lang encoder to get the feature in that feedback
+        nlcomp_feature = model.lang_encoder(nlcomp)
 
         # Select optimal traj based on current reward func
-        # TODO: argmax...?
+        traj_opt = trajs[np.argmax(np.dot(feature_values, learned_reward.numpy().T))]
+        traj_opt_embed = model.traj_encoder(traj_opt) 
 
         # Compute dot product of lang(traj_opt - traj_cur)
         # Minimize the negative dot product (loss)!
-        loss = criteria(traj_cur, traj_opt, lang_feedback)
-
+        loss = criteria(traj_cur_embed, traj_opt_embed, nlcomp_feature)
         # Backprop
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        # TODO: Cosine sim of (current learned reward, true reward) (erdem help)
+        # TODO: loglikelihood measure (of randomly chosen trajectory pairs from the test set) for the learned reward?
 
 
 if __name__ == "__main__":
