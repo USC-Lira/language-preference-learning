@@ -133,7 +133,15 @@ def run(args):
         loss.backward()
         optimizer.step()
 
-        # TODO: loglikelihood measure (of randomly chosen trajectory pairs from the test set) for the learned reward?
+        # log likelihood of random pair of trajs
+        rand = np.random.randint(0, len(trajs))
+        traj_a = trajs[rand]
+        traj_a_embed = model.traj_encoder(traj_a)
+        rand = np.random.randint(0, len(trajs))
+        traj_b = trajs[rand]
+        traj_b_embed = model.traj_encoder(traj_b)
+
+        log_likelihood = nn.functional.logsigmoid(traj_b_embed - traj_a_embed)
 
 
 if __name__ == "__main__":
