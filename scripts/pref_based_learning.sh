@@ -7,3 +7,4 @@ python -m pref_learning.pref_based_learning \
   --bert-model=bert-tiny \
   --use-bert-encoder \
   --use-cnn-in-transformer \
+  --use-softmax \
