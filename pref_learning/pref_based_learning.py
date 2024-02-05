@@ -172,20 +172,13 @@ def run(args):
             loss.backward()
             optimizer.step()
 
-        # log likelihood of random pair of trajs
-        # TODO: Erdem need clarification!!
-        rand = np.random.randint(0, len(batch))
-        traj_a_embed = traj_embeds[batch_num][rand]
-        rand = np.random.randint(0, len(batch))
-        traj_b_embed = traj_embeds[batch_num][rand]
 
-        # make sure reward(a) > reward(b)
-        reward_a = torch.dot(traj_a_embed, true_reward.numpy().T)
-        reward_b = torch.dot(traj_b_embed, true_reward.numpy().T)
-        if (reward_a < reward_b):
-            traj_a_embed, traj_b_embed = traj_b_embed, traj_a_embed
-        log_likelihood = nn.functional.logsigmoid(traj_a_embed - traj_b_embed)
-        print(f'Log likelihood: {log_likelihood}')
+
+        # TODO: calc cross-entropy for learned reward function analysis
+        # two trajs
+        # learned reward function with softmax
+        # true reward function with softmax
+        # cross-entropy with the Bernoulli distr from each
 
 
 if __name__ == "__main__":
