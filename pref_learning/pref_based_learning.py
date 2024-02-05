@@ -5,6 +5,7 @@ import json
 import os
 import torch
 import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import argparse
 
@@ -39,24 +40,48 @@ class Loss(nn.Module):
 
 
 def run(args):
+
     # data
     # Load the test trajectories and language comparisons first
     trajs = np.load(f'{args.data_dir}/test/trajs.npy')
     nlcomps = json.load(open(f'{args.data_dir}/test/unique_nlcomps.json', 'rb'))
     nlcomps_bert_embeds = np.load(f'{args.data_dir}/test/unique_nlcomps_{args.bert_model}.npy')
-    classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
-    # TODO: need to run categorize.py 
+
+    if (args.use_all_datasets):
+        # train+val+test all datasets
+        # append train and val datasets
+        trajs = np.append(trajs, np.load(f'{args.data_dir}/train/trajs.npy'), axis=0)
+        nlcomps = json.load(open(f'{args.data_dir}/train/unique_nlcomps.json', 'rb')) + nlcomps
+        nlcomps_bert_embeds = np.append(nlcomps_bert_embeds, np.load(f'{args.data_dir}/train/unique_nlcomps_{args.bert_model}.npy'), axis=0)
+
+        trajs = np.append(trajs, np.load(f'{args.data_dir}/val/trajs.npy'), axis=0)
+        nlcomps = json.load(open(f'{args.data_dir}/val/unique_nlcomps.json', 'rb')) + nlcomps
+        nlcomps_bert_embeds = np.append(nlcomps_bert_embeds, np.load(f'{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy'), axis=0)
+
+    # need to run categorize.py first 
+    # classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
     greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
     less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Find the optimal trajectory given the reward function
+    feature_values = np.array([get_feature_value(traj) for traj in trajs])
+    # Normalize feature values
+    feature_values = (feature_values - np.min(feature_values, axis=0)) / (
+            np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
 
     less_idx = np.random.choice(5, size=2, replace=False)
     for i in less_idx:
         feature_values[:, i] = 1 - feature_values[:, i]
 
+    # split into batches
+    feature_values = np.split(feature_values, args.num_batches)
+
     # split trajs into arg.num_batches batches
         # test size = 22 (172 train, 22 val)
         # possible batch sizes: 1, 2, 11, 22
+    if (args.num_batches > len(trajs)):
+        args.num_batches = len(trajs)
     trajs = np.split(trajs, args.num_batches)
 
 
@@ -64,11 +89,11 @@ def run(args):
     # Load the model
     if args.use_bert_encoder:
         lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
+        # tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
         feature_dim = BERT_OUTPUT_DIM[args.bert_model]
     else:
         lang_encoder = None
-        tokenizer = None
+        # tokenizer = None
         feature_dim = 128
 
     model = NLTrajAutoencoder(
@@ -89,29 +114,18 @@ def run(args):
     model.eval()
 
     # random init both reward functions (learned, true)
-    # TODO: random init both learned and true?
     learned_reward = RewardFunc(128, 1)
     true_reward = initialize_reward(5)
+    nn.init.normal_(learned_reward.linear.weight, mean=0.5, std=0.01)
 
     # loss func
     criteria = Loss()
     optimizer = torch.optim.Adam(learned_reward.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
-                                                    nlcomps_bert_embeds)
-
-    # Find the optimal trajectory given the reward function
-    feature_values = np.array([get_feature_value(traj) for traj in trajs])
-    # Normalize feature values
-    feature_values = (feature_values - np.min(feature_values, axis=0)) / (
-            np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
-    # split into batches
-    feature_values = np.split(feature_values, args.num_batches)
-
-    
+    # traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
+    #                                                 nlcomps_bert_embeds)
 
     np.random.seed(args.seed)
-
 
     for batch_num, batch in enumerate(trajs):
         # random select traj in current batch
@@ -134,7 +148,7 @@ def run(args):
             nlcomp_feature = model.lang_encoder(nlcomp)
 
             # Select optimal traj based on current reward func
-            traj_opt = trajs[batch_num][np.argmax(np.dot(feature_values[batch_num], learned_reward.numpy().T))]
+            traj_opt = batch[np.argmax(np.dot(feature_values[batch_num], learned_reward.numpy().T))]
             traj_opt_embed = model.traj_encoder(traj_opt) 
 
             # Compute dot product of lang(traj_opt - traj_cur)
@@ -145,28 +159,34 @@ def run(args):
             loss.backward()
             optimizer.step()
 
-            # log likelihood of random pair of trajs
-            # TODO: Erdem need clarification!!
-            
-            # rand = np.random.randint(0, len(trajs))
-            # traj_a = trajs[rand]
-            # traj_a_embed = model.traj_encoder(traj_a)
-            # rand = np.random.randint(0, len(trajs))
-            # traj_b = trajs[rand]
-            # traj_b_embed = model.traj_encoder(traj_b)
+        # log likelihood of random pair of trajs
+        # TODO: Erdem need clarification!!
+        rand = np.random.randint(0, len(batch))
+        traj_a = batch[rand]
+        traj_a_embed = model.traj_encoder(traj_a)
+        rand = np.random.randint(0, len(batch))
+        traj_b = batch[rand]
+        traj_b_embed = model.traj_encoder(traj_b)
 
-            # log_likelihood = nn.functional.logsigmoid(traj_b_embed - traj_a_embed)
+        # make sure reward(a) > reward(b)
+        reward_a = torch.dot(traj_a_embed, true_reward.numpy().T)
+        reward_b = torch.dot(traj_b_embed, true_reward.numpy().T)
+        if (reward_a < reward_b):
+            traj_a_embed, traj_b_embed = traj_b_embed, traj_a_embed
+        log_likelihood = nn.functional.logsigmoid(traj_a_embed - traj_b_embed)
+        print(f'Log likelihood: {log_likelihood}')
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('--data_dir', type=str, default='data', help='')
-    parser.add_argument('--model_dir', type=str, default='models', help='')
-    parser.add_argument('--encoder_hidden_dim')
-    parser.add_argument('--decoder_hidden_dim')
-    parser.add_argument('--preprocessed_nlcomps', action='store_true', help="")
-    parser.add_argument('--bert_model', type=str, default='bert-base', help='which BERT model to use')
+    parser.add_argument('--data-dir', type=str, default='data', help='')
+    parser.add_argument('--model-dir', type=str, default='models', help='')
+    parser.add_argument('--num-batches', type=int, default=2, help='')
+    parser.add_argument('--encoder-hidden-dim', type=int, default=128)
+    parser.add_argument('--decoder-hidden-dim', type=int, default=128)
+    parser.add_argument('--preprocessed-nlcomps', action='store_true', help="")
+    parser.add_argument('--bert-model', type=str, default='bert-base', help='which BERT model to use')
     parser.add_argument('--use-bert-encoder', action="store_true", help='whether to use BERT in the language encoder')
     parser.add_argument('--traj-encoder', default='mlp', choices=['mlp', 'transformer', 'lstm'],
                         help='which trajectory encoder to use')
@@ -176,7 +196,8 @@ if __name__ == "__main__":
     parser.add_argument('--weight-decay', type=float, default=0, help='')
     parser.add_argument('--lr', type=float, default=1e-3, help='')
     parser.add_argument('--seed', type=int, default=0, help='')
-    parser.add_argument('--num_iterations', type=int, default=10, help='')
+    parser.add_argument('--num-iterations', type=int, default=10, help='')
+    parser.add_argument('--use-all-datasets', action="store_true", help='whether to use all datasets or just test set')
 
     args = parser.parse_args()
     run(args)
