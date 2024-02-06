@@ -146,20 +146,19 @@ def run(args):
         # TODO: is this the optimal traj..? do the dimensions even align
         true_traj_opt_i = np.argmax(np.dot(feature_values[batch_num], true_reward.T))
 
+        # use current learned encoder for traj to get features
+        # TODO: dim 5?
+        # TODO: diff between this and feature_values[rand]?
+        traj_cur_embed = traj_embeds[batch_num][rand]
+
+        # Use true reward func to get language feedback (select from set)
+        nlcomp = get_lang_feedback(feature_values[batch_num][true_traj_opt_i], feature_values[batch_num][rand], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
+
+        # Based on language feedback, use learned lang encoder to get the feature in that feedback
+        # nlcomp_feature = model.lang_encoder(nlcomp)
+        nlcomp_feature = lang_embeds[batch_num][nlcomps.index(nlcomp)]
+
         for i in range(args.num_iterations):
-            # use current learned encoder for traj to get features
-            # TODO: dim 5?
-            # TODO: diff between this and feature_values[rand]?
-            traj_cur_embed = traj_embeds[batch_num][rand]
-
-            # Use true reward func to get language feedback (select from set)
-            nlcomp = get_lang_feedback(feature_values[batch_num][true_traj_opt_i], feature_values[batch_num][rand], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
-
-            # Based on language feedback, use learned lang encoder to get the feature in that feedback
-            # nlcomp_feature = model.lang_encoder(nlcomp)
-            nlcomp_feature = lang_embeds[batch_num][nlcomps.index(nlcomp)]
-            
-
             # Select optimal traj based on current reward func
             cur_traj_opt_i = np.argmax(np.dot(feature_values[batch_num], learned_reward.numpy().T))
             traj_opt_embed = traj_embeds[batch_num][cur_traj_opt_i]
