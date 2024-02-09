@@ -16,32 +16,37 @@ from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.learn_features import load_data
 from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM, create_logger, AverageMeter
 from model_analysis.utils import get_traj_lang_embeds
-from model_analysis.improve_trajectory import initialize_reward, get_feature_value, get_lang_feedback
+from model_analysis.improve_trajectory import initialize_reward, get_feature_value
 
 DEBUG = True
+
 
 # learned and true reward func (linear for now)
 class RewardFunc(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(RewardFunc, self).__init__()
-        self.linear = nn.Linear(input_dim, output_dim)
+        self.linear = nn.Linear(input_dim, output_dim, bias=False)
 
     def forward(self, x):
         return self.linear(x)
 
 
-class Loss(nn.Module):
-    def __init__(self):
-        super(Loss, self).__init__()
-
-    def forward(self, traj_cur, traj_opt, lang_feedback):
-        # neg dot product
-        dot_product = torch.exp(torch.dot(lang_feedback, (traj_opt - traj_cur)))
-        return -dot_product
+def get_lang_feedback_aspect(feature_value, reward, noisy=False):
+    """
+    Get language feedback based on feature value and reward function
+    """
+    probs = torch.softmax(reward * (1 - feature_value), dim=0)
+    if noisy:
+        # add some noise to the probabilities
+        probs = probs + torch.randn_like(probs) * 1e-5
+        # sample a language comparison with the probabilities
+        idx = torch.multinomial(probs, 1).item()
+    else:
+        idx = torch.argmax(probs).item()
+    return idx
 
 
 def run(args):
-
     # data
     # Load the test trajectories and language comparisons first
     trajs = np.load(f'{args.data_dir}/test/trajs.npy')
@@ -57,11 +62,13 @@ def run(args):
         # append train and val datasets
         trajs = np.append(trajs, np.load(f'{args.data_dir}/train/trajs.npy'), axis=0)
         nlcomps = json.load(open(f'{args.data_dir}/train/unique_nlcomps.json', 'rb')) + nlcomps
-        nlcomps_bert_embeds = np.append(nlcomps_bert_embeds, np.load(f'{args.data_dir}/train/unique_nlcomps_{args.bert_model}.npy'), axis=0)
+        nlcomps_bert_embeds = np.append(nlcomps_bert_embeds,
+                                        np.load(f'{args.data_dir}/train/unique_nlcomps_{args.bert_model}.npy'), axis=0)
 
         trajs = np.append(trajs, np.load(f'{args.data_dir}/val/trajs.npy'), axis=0)
         nlcomps = json.load(open(f'{args.data_dir}/val/unique_nlcomps.json', 'rb')) + nlcomps
-        nlcomps_bert_embeds = np.append(nlcomps_bert_embeds, np.load(f'{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy'), axis=0)
+        nlcomps_bert_embeds = np.append(nlcomps_bert_embeds,
+                                        np.load(f'{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy'), axis=0)
 
         if DEBUG: print("length of trajs after using all datasets: " + str(len(trajs)))
 
@@ -118,12 +125,10 @@ def run(args):
     true_reward = initialize_reward(5)
     nn.init.normal_(learned_reward.linear.weight, mean=0.5, std=0.01)
 
-    # loss func
-    criteria = Loss()
-    optimizer = torch.optim.Adam(learned_reward.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.SGD(learned_reward.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-
-    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer, nlcomps_bert_embeds)
+    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
+                                                    nlcomps_bert_embeds)
 
     # split into batches
     feature_values = np.split(feature_values, args.num_batches)
@@ -131,8 +136,8 @@ def run(args):
     lang_embeds = np.split(lang_embeds, args.num_batches)
 
     # split trajs into arg.num_batches batches
-        # test size = 22 (172 train, 22 val)
-        # possible batch sizes: 1, 2, 11, 22
+    # test size = 22 (172 train, 22 val)
+    # possible batch sizes: 1, 2, 11, 22
     if (args.num_batches > len(trajs)):
         args.num_batches = len(trajs)
     trajs = np.split(trajs, args.num_batches)
@@ -143,35 +148,32 @@ def run(args):
         # random select traj in current batch
         rand = np.random.randint(0, len(batch))
 
-        # TODO: is this the optimal traj..? do the dimensions even align
-        true_traj_opt_i = np.argmax(np.dot(feature_values[batch_num], true_reward.T))
-
         # use current learned encoder for traj to get features
-        # TODO: dim 5?
-        # TODO: diff between this and feature_values[rand]?
         traj_cur_embed = traj_embeds[batch_num][rand]
 
         # Use true reward func to get language feedback (select from set)
-        nlcomp = get_lang_feedback(feature_values[batch_num][true_traj_opt_i], feature_values[batch_num][rand], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
+        # First find the feature aspect to give feedback on and positive / negative
+        feature_value = feature_values[batch_num][rand]
+        feature_aspect_idx = get_lang_feedback_aspect(feature_value, true_reward, args.use_softmax)
+        if feature_aspect_idx in less_idx:
+            # randomly choose from less_nlcomps
+            nlcomp = np.random.choice(less_nlcomps[feature_aspect_idx])
+        else:
+            # randomly choose from greater_nlcomps
+            nlcomp = np.random.choice(greater_nlcomps[feature_aspect_idx])
 
         # Based on language feedback, use learned lang encoder to get the feature in that feedback
         # nlcomp_feature = model.lang_encoder(nlcomp)
         nlcomp_feature = lang_embeds[batch_num][nlcomps.index(nlcomp)]
 
         for i in range(args.num_iterations):
-            # Select optimal traj based on current reward func
-            cur_traj_opt_i = np.argmax(np.dot(feature_values[batch_num], learned_reward.numpy().T))
-            traj_opt_embed = traj_embeds[batch_num][cur_traj_opt_i]
-
             # Compute dot product of lang(traj_opt - traj_cur)
             # Minimize the negative dot product (loss)!
-            loss = criteria(traj_cur_embed, traj_opt_embed, nlcomp_feature)
+            loss = - torch.exp(learned_reward(nlcomp_feature)) / (torch.exp(learned_reward(nlcomp_feature)) + 1)
             # Backprop
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-
 
         # TODO: calc cross-entropy for learned reward function analysis
         # two trajs
