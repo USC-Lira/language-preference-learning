@@ -16,7 +16,7 @@ from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
 from feature_learning.learn_features import load_data
 from feature_learning.utils import timeStamped, BERT_MODEL_NAME, BERT_OUTPUT_DIM, create_logger, AverageMeter
 from model_analysis.utils import get_traj_lang_embeds
-from model_analysis.improve_trajectory import initialize_reward, get_feature_value
+from model_analysis.improve_trajectory import initialize_reward, get_feature_value, get_lang_feedback
 
 DEBUG = True
 
@@ -189,56 +189,44 @@ def run(args):
             loss.backward()
             optimizer.step()
 
-        # calc cross-entropy for learned reward function analysis
-             
+        # TODO: calc cross-entropy for learned reward function analysis
+        # two trajs
+        # learned reward function with softmax
+        # true reward function with softmax
+        # cross-entropy with the Bernoulli distr from each
+            
+            # RE loglikelihood: yes. Basically, take two trajectories and compare (with softmax) how good they are based on the learned and the true reward functions. You will get two Bernoulli distributions. You can calculate cross-entropy between those distributions. (initally, I thought we would get preference labels and it would be log-likelihood, but no need, we can directly get probabilities because these are simulated humans, so cross-entropy is better)
+
+            
         # get two trajectories from the entire dataset
-        rand_batch = np.random.randint(0, len(trajs))
-        rand_num1 = np.random.randint(0, len(trajs[rand_batch]))
-        rand_num2 = (rand_num1 + 1) % len(trajs[rand_batch])
+            # 1 is optimal, 2 is current
+        rand_batch1 = np.random.randint(0, len(trajs))
+        rand_batch2 = (rand_batch1 + 1) % len(trajs)
+        rand_num1 = np.random.randint(0, len(trajs[rand_batch1]))
+        rand_num2 = (rand_num1 + 1) % len(trajs[rand_batch2])
         # traj1 = trajs[rand_batch][rand_num1]
         # traj2 = trajs[rand_batch][rand_num2]
 
-        # get the feature values for the two trajectories
-        feature_value1 = feature_values[rand_batch][rand_num1]
-        feature_value2 = feature_values[rand_batch][rand_num2]
-
-        # get the language feedback for the two trajectories
-        feature_aspect_idx1 = get_lang_feedback_aspect(feature_value1, true_reward, args.use_softmax)
-        feature_aspect_idx2 = get_lang_feedback_aspect(feature_value2, true_reward, args.use_softmax)
-
-        # Use true reward func to get language feedback (select from set)
-        # First find the feature aspect to give feedback on and positive / negative
-        feature_value1 = feature_values[rand_batch][rand_num1]
-        feature_value2 = feature_values[rand_batch][rand_num2]
-        feature_aspect_idx1 = get_lang_feedback_aspect(feature_value1, true_reward, args.use_softmax)
-        feature_aspect_idx2 = get_lang_feedback_aspect(feature_value2, true_reward, args.use_softmax)
-        if feature_aspect_idx1 in less_idx:
-            # randomly choose from less_nlcomps
-            nlcomp1 = np.random.choice(less_nlcomps[feature_aspect_idx])
-        else:
-            # randomly choose from greater_nlcomps
-            nlcomp1 = np.random.choice(greater_nlcomps[feature_aspect_idx])
-        if feature_aspect_idx2 in less_idx:
-            # randomly choose from less_nlcomps
-            nlcomp2 = np.random.choice(less_nlcomps[feature_aspect_idx])
-        else:
-            # randomly choose from greater_nlcomps
-            nlcomp2 = np.random.choice(greater_nlcomps[feature_aspect_idx])
-
+        true_nlcomp = get_lang_feedback(feature_values[rand_batch1][rand_num1], feature_values[rand_batch2][rand_num2], true_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
+        learned_nlcomp = get_lang_feedback(feature_values[rand_batch1][rand_num1], feature_values[rand_batch2][rand_num2], learned_reward, less_idx, greater_nlcomps, less_nlcomps, args.use_softmax)
 
         # Based on language feedback, use learned lang encoder to get the feature in that feedback
         # nlcomp_feature = model.lang_encoder(nlcomp)
-        nlcomp_feature1 = lang_embeds[batch_num][nlcomps.index(nlcomp1)]
-        nlcomp_feature2 = lang_embeds[batch_num][nlcomps.index(nlcomp2)]
+        true_nlcomp_feature = lang_embeds[batch_num][nlcomps.index(true_nlcomp)]
+        learned_nlcomp_feature = lang_embeds[batch_num][nlcomps.index(learned_nlcomp)]
 
         # get bernoulli distributions for the two trajectories
-        probs1 = torch.softmax(learned_reward(nlcomp_feature1), dim=0)
-        probs2 = torch.softmax(learned_reward(nlcomp_feature2), dim=0)
-        samples1 = torch.bernoulli(probs1)
-        samples2 = torch.bernoulli(probs2)
+        true_probs = torch.softmax(true_reward(true_nlcomp_feature), dim=0)
+        learned_probs = torch.softmax(learned_reward(learned_nlcomp_feature), dim=0)
+        true_bernoulli = torch.bernoulli(true_probs)
+        Learned_bernoulli = torch.bernoulli(learned_probs)
 
         # calculate cross-entropy
-        cross_entropy = cross_entropy(probs1, probs2)
+        cross_entropy = cross_entropy(true_bernoulli, Learned_bernoulli)
+        
+
+
+
         
 
 
