@@ -21,7 +21,7 @@ less_gtreward_adjs = ["worse", "not as well", "diminish your proficiency", "less
 greater_speed_adjs = ["faster", "quicker", "swifter", "at a higher speed", "hasten", "quickly", "speed up", "increase your pace", "increase the speed"]
 less_speed_adjs = ["slower", "more moderate", "more sluggish", "at a lower speed", "slow", "decrease the speed"]
 greater_height_adjs = ["higher", "taller", "at a greater height", "ascend", "elevate"]
-less_height_adjs = ["lower", "shorter", "at a lesser height", "descend"]
+less_height_adjs = ["lower", "more down", "at a lesser height", "descend"]
 greater_distance_adjs = ["further", "farther", "more distant", "increase the distance", "increase the distance"]
 less_distance_adjs = ["closer", "nearer", "more nearby", "approach", "reduce your movement distance", "decrease the distance"]
 
