@@ -94,13 +94,20 @@ def load_data(args, test=False):
     return trajs, nlcomps, greater_nlcomps, less_nlcomps
 
 
-def _pref_learning(train_dataloader, test_dataloader, nlcomps, greater_nlcomps, less_nlcomps, learned_reward,
+def reconstruct_traj(traj_embed, model, nlcomp_embeds):
+    new_trajs = traj_embed + nlcomp_embeds
+    recon_trajs = model.traj_decoder(new_trajs)
+    return recon_trajs
+
+
+def _pref_learning(train_dataloader, test_dataloader, model, greater_nlcomps, less_nlcomps, learned_reward,
                    true_reward, traj_embeds, lang_embeds, test_traj_embeds, test_traj_true_rewards,
                    less_idx, optimizer, args):
     eval_cross_entropies = []
+    logsigmoid = nn.LogSigmoid()
     for train_data in train_dataloader:
         curr_traj, curr_feature_value, idx = train_data
-
+        curr_traj_embed = traj_embeds[idx]
         # Use true reward func to get language feedback (select from set)
         # First find the feature aspect to give feedback on and positive / negative
         feature_aspect_idx = get_lang_feedback_aspect(curr_feature_value, true_reward, args.use_softmax)
@@ -116,10 +123,14 @@ def _pref_learning(train_dataloader, test_dataloader, nlcomps, greater_nlcomps, 
         nlcomp_features = torch.tensor([lang_embeds[nlcomps.index(nlcomp)] for nlcomp in nlcomps])
         nlcomp_features_norm = torch.norm(nlcomp_features, dim=1, keepdim=True)
 
+        # recon_trajs = reconstruct_traj(curr_traj_embed, model, nlcomp_features)
+        # true_recon_features = [get_feature_value(recon_traj) for recon_traj in recon_trajs]
+
         for i in range(args.num_iterations):
             # Compute dot product of lang(traj_opt - traj_cur)
             # Minimize the negative dot product (loss)!
-            loss = -torch.mean(torch.exp(learned_reward(nlcomp_features)) / (torch.exp(learned_reward(nlcomp_features)) + 1), dim=0)
+            # loss = torch.mean(torch.exp(learned_reward(nlcomp_features)) / (torch.exp(learned_reward(nlcomp_features)) + 1), dim=0)
+            loss = -logsigmoid(learned_reward(nlcomp_features)).mean()
             # Backprop
             optimizer.zero_grad()
             loss.backward()
@@ -144,7 +155,10 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds):
 
         # get bernoulli distributions for the two trajectories
         true_rewards = torch.tensor([true_traj_rewards[idx_a], true_traj_rewards[idx_b]])
-        true_probs = torch.softmax(true_rewards, dim=0)
+        # make true probs 0 and 1
+        true_probs = torch.tensor([torch.argmax(true_rewards) == 0, torch.argmax(true_rewards) == 1]).float()
+        # make true probs with softmax
+        # true_probs = torch.softmax(true_rewards, dim=0)
 
         traj_a_embed = torch.tensor(traj_a_embed)
         traj_b_embed = torch.tensor(traj_b_embed)
