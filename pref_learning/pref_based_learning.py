@@ -47,22 +47,6 @@ def get_lang_feedback_aspect(feature_value, reward, noisy=False):
     return idx
 
 
-def calculate_cross_entropy(p_probs, q_probs):
-    # Ensure probabilities are within valid range
-    p_probs = torch.clamp(p_probs, 1e-6, 1 - 1e-6)
-    q_probs = torch.clamp(q_probs, 1e-6, 1 - 1e-6)
-
-    # Calculate cross-entropy
-    # print(q_probs)
-    cross_entropy = -(p_probs * torch.log(q_probs) + (1 - p_probs) * torch.log(1 - q_probs))
-
-    # Sum over probabilities
-    cross_entropy = torch.sum(cross_entropy)
-    assert cross_entropy is not torch.nan
-
-    return cross_entropy.item()
-
-
 def load_data(args, test=False):
     # Load the test trajectories and language comparisons
     if not test:
@@ -108,6 +92,9 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
     eval_cross_entropies = []
     all_lang_feedback = []
     logsigmoid = nn.LogSigmoid()
+    init_ce = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
+    print("Initial Cross Entropy:", init_ce)
+    eval_cross_entropies.append(init_ce)
     for train_data in train_dataloader:
         curr_traj, curr_feature_value, idx = train_data
         curr_traj_embed = traj_embeds[idx]
@@ -124,8 +111,8 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
         all_lang_feedback.append(nlcomp)
 
         # Get the feature of the language comparison
-        # traj_feature = traj_embeds[idx]
-        nlcomp_feature = torch.tensor([lang_embeds[nlcomps.index(nlcomp)] for nlcomp in all_lang_feedback])
+        nlcomp_feature = torch.concat([torch.from_numpy(lang_embeds[nlcomps.index(nlcomp)]).view(1, -1)
+                                       for nlcomp in all_lang_feedback], dim=0)
 
         # nlcomp_feature_norm = torch.norm(nlcomp_feature, dim=1, keepdim=True)
 
@@ -142,16 +129,15 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
             loss.backward()
             optimizer.step()
 
-        # print('=====================')
-        # print(loss)
-        # Do the evaluation
+        # Evaluation
         cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
         eval_cross_entropies.append(cross_entropy)
     return eval_cross_entropies
 
 
-def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds):
+def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, test=False):
     total_cross_entropy = AverageMeter('cross-entropy')
+    bce_loss = nn.BCELoss()
     for i, test_data in enumerate(test_dataloader):
         traj_a, traj_b, idx_a, idx_b = test_data
 
@@ -164,19 +150,17 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds):
         # make true probs 0 and 1
         true_probs = torch.tensor([torch.argmax(true_rewards) == 0, torch.argmax(true_rewards) == 1]).float()
         # make true probs with softmax
-        # true_probs = torch.softmax(true_rewards, dim=0)
+        # true_probs = torch.softmax(true_rewards, dim=0).float()
 
         traj_a_embed = torch.tensor(traj_a_embed)
         traj_b_embed = torch.tensor(traj_b_embed)
         learned_rewards = torch.tensor([learned_reward(traj_a_embed), learned_reward(traj_b_embed)])
         learned_probs = torch.softmax(learned_rewards, dim=0)
-
-        # if i < 5:
-        #     print("true_probs: " + str(true_probs))
-        #     print("learned_probs: " + str(learned_probs))
+        if test:
+            learned_probs = torch.softmax(torch.tensor([0.5, 0.5]), dim=0)
 
         # calculate cross-entropy between learned and true distributions
-        cross_entropy = calculate_cross_entropy(true_probs, learned_probs)
+        cross_entropy = bce_loss(learned_probs, true_probs)
         total_cross_entropy.update(cross_entropy, 1)
     return total_cross_entropy.avg
 
@@ -230,7 +214,7 @@ def run(args):
     # random init both reward functions (learned, true)
     learned_reward = RewardFunc(128, 1)
     true_reward = initialize_reward(5)
-    nn.init.normal_(learned_reward.linear.weight, mean=0.5, std=0.01)
+    nn.init.normal_(learned_reward.linear.weight, mean=0, std=0.01)
     optimizer = torch.optim.SGD(learned_reward.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # Load test data
