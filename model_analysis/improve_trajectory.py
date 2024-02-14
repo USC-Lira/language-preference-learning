@@ -23,12 +23,18 @@ def initialize_reward(num_features):
     return reward_func
 
 
-def get_feature_value(traj):
+def get_feature_value(traj, mean=True):
     # Get feature values for each timestep
-    feature_values = [
-        [gt_reward(state), speed(state), height(state), distance_to_cube(state), distance_to_bottle(state)]
-        for state in traj]
-    return np.mean(feature_values, axis=0)
+    if not mean:
+        features_values = np.array([gt_reward(traj), speed(traj), height(traj), distance_to_cube(traj),
+                                    distance_to_bottle(traj)])
+        return features_values
+
+    else:
+        feature_values = [
+            [gt_reward(state), speed(state), height(state), distance_to_cube(state), distance_to_bottle(state)]
+            for state in traj]
+        return np.mean(feature_values, axis=0)
 
 
 def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds, softmax=False):
@@ -184,21 +190,29 @@ def main(args):
     feature_values = np.array([get_feature_value(traj) for traj in trajs])
     # Normalize feature values
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
-                np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
+            np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
 
     # Randomly select some features and set their values to 1 - original value
     less_idx = np.random.choice(5, size=2, replace=False)
     for i in less_idx:
         feature_values[:, i] = 1 - feature_values[:, i]
 
-    optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values, less_idx,
-                                                                           greater_nlcomps, less_nlcomps, traj_embeds,
-                                                                           lang_embeds, model, device, tokenizer,
-                                                                           lang_encoder, args, use_softmax=False)
-    optimal_reached, optimal_traj_value_softmax, traj_values_softmax = improve_trajectory(reward_func, feature_values, less_idx,
-                                                                            greater_nlcomps, less_nlcomps, traj_embeds,
-                                                                            lang_embeds, model, device, tokenizer,
-                                                                            lang_encoder, args, use_softmax=True)
+    optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values,
+                                                                                        less_idx,
+                                                                                        greater_nlcomps, less_nlcomps,
+                                                                                        traj_embeds,
+                                                                                        lang_embeds, model, device,
+                                                                                        tokenizer,
+                                                                                        lang_encoder, args,
+                                                                                        use_softmax=False)
+    optimal_reached, optimal_traj_value_softmax, traj_values_softmax = improve_trajectory(reward_func, feature_values,
+                                                                                          less_idx,
+                                                                                          greater_nlcomps, less_nlcomps,
+                                                                                          traj_embeds,
+                                                                                          lang_embeds, model, device,
+                                                                                          tokenizer,
+                                                                                          lang_encoder, args,
+                                                                                          use_softmax=True)
 
     return optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax
 

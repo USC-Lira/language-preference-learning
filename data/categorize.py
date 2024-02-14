@@ -7,8 +7,8 @@ from data.utils import less_speed_adjs, less_height_adjs
 from data.utils import height_nouns, speed_nouns, distance_nouns
 
 
-def categorize(curr_dir, split='train', output_dir='dataset'):
-    with open(os.path.join(curr_dir, 'GPT_augmented_comps.json'), 'rb') as f:
+def categorize(split='train', output_dir='dataset'):
+    with open(os.path.join(os.getcwd(), 'GPT_augmented_comps.json'), 'rb') as f:
         a = json.load(f)
     classified = {
         "gt_reward": [],
@@ -133,18 +133,18 @@ def categorize(curr_dir, split='train', output_dir='dataset'):
     for feature in less:
         print("lesser " + feature + " len: " + str(len(less[feature])))
 
-    with open(os.path.join(os.getcwd(), output_dir, split, 'classified_nlcomps.json'), 'w') as f:
+    with open(os.path.join(data_dir, output_dir, 'classified_nlcomps.json'), 'w') as f:
         json.dump(classified, f, indent=4)
 
-    with open(os.path.join(os.getcwd(), output_dir, split,'greater_nlcomps.json'), 'w') as f:
+    with open(os.path.join(data_dir, output_dir,'greater_nlcomps.json'), 'w') as f:
         json.dump(greater, f, indent=4)
 
-    with open(os.path.join(os.getcwd(), output_dir, split,'less_nlcomps.json'), 'w') as f:
+    with open(os.path.join(os.getcwd(), output_dir,'less_nlcomps.json'), 'w') as f:
         json.dump(less, f, indent=4)
 
 
 if __name__ == "__main__":
     data_dir = os.getcwd()
-    categorize(data_dir, split='train', output_dir='dataset_test')
-    categorize(data_dir, split='val', output_dir='dataset_test')
-    categorize(data_dir, split='test', output_dir='dataset_test')
+    categorize(split='val', output_dir='dataset-pref-learning/train')
+    categorize(split='test', output_dir='dataset-pref-learning/val')
+    # categorize(data_dir, split='test', output_dir='dataset_test')

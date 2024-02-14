@@ -172,93 +172,21 @@ if __name__ == '__main__':
 
     np.random.seed(seed)
 
-    # print("GETTING TRAJECTORY ROLLOUTS...")
-    # trajectories = []
-    # # trajectory_rewards = []
-    # trajectory_video_ids = []
-    # has_video_ids = True
-    # for config in os.listdir(policy_dir):
-    #     if with_videos:
-    #         policy_path = os.path.join(policy_dir, config, "with_camera_obs")
-    #     else:
-    #         policy_path = os.path.join(policy_dir, config)
-    #     if os.path.isdir(policy_path) and os.listdir(
-    #             policy_path):  # Check that policy_path is a directory and that directory is not empty
-    #         print(policy_path)
-    #         observations = np.load(os.path.join(policy_path, "traj_observations.npy"))
-    #         actions = np.load(os.path.join(policy_path, "traj_actions.npy"))
-    #         try:
-    #             video_ids = np.load(os.path.join(policy_path, "traj_video_ids.npy"))
-    #         except FileNotFoundError:
-    #             has_video_ids = False
-    #
-    #         # WARNING: rewards here is the reward given by the custom weights (0, 1, 2) that we used to train the
-    #         # diverse policies, NOT the true ground truth Lift environment reward.
-    #         # rewards = np.load(os.path.join(policy_path, "traj_rewards.npy"))
-    #
-    #         # observations has dimensions (n_trajs, n_timesteps, obs_dimension)
-    #         trajs = np.concatenate((observations, actions), axis=-1)
-    #
-    #         # Downsample
-    #         if config == 'expert':
-    #             trajs = trajs[0:trajs_per_expert_policy]
-    #             if has_video_ids:
-    #                 video_ids = video_ids[0:trajs_per_expert_policy]
-    #             # rewards = rewards[0:trajs_per_expert_policy]
-    #         else:
-    #             trajs = trajs[0:trajs_per_policy]
-    #             if has_video_ids:
-    #                 video_ids = video_ids[0:trajs_per_policy]
-    #             # rewards = rewards[0:trajs_per_policy]
-    #
-    #         # NOTE: We use extend rather than append because we don't want to add an
-    #         # additional dimension across the policies.
-    #         trajectories.extend(trajs)
-    #         # trajectory_rewards.extend(rewards)
-    #         if has_video_ids:
-    #             trajectory_video_ids.extend(video_ids)
-    #
-    # trajectories = np.asarray(trajectories)
-    # # trajectory_rewards = np.asarray(trajectory_rewards)
-    # num_trajectories = trajectories.shape[0]
-    #
-    # # Shuffle
-    # p = np.random.permutation(num_trajectories)
-    # trajectories = trajectories[p]
-    # # trajectory_rewards = trajectory_rewards[p]
-    #
-    # # Split
-    # split_i = int(np.ceil(val_split*num_trajectories))
-    # val_trajectories = trajectories[0:split_i]
-    # # val_trajectory_rewards = trajectory_rewards[0:split_i]
-    # train_trajectories = trajectories[split_i:]
-    # # train_trajectory_rewards = trajectory_rewards[split_i:]
-    #
-    # if has_video_ids:
-    #     trajectory_video_ids = np.asarray(trajectory_video_ids)
-    #     trajectory_video_ids = trajectory_video_ids[p]
-    #     val_trajectory_video_ids = trajectory_video_ids[0:split_i]
-    #     train_trajectory_video_ids = trajectory_video_ids[split_i:]
-    #
-    # print("NUM_TRAJECTORIES:", num_trajectories)
-    # print("NUM TRAIN TRAJECTORIES:", len(train_trajectories))
-    # print("NUM VAL TRAJECTORIES:", len(val_trajectories))
-    # print("COMPILING DATASET:")
-
-    data_dir = '/home/resl/language-preference-learning/data/dataset'
+    data_dir = '/data/dataset-pref-learning'
     train_trajectories = np.load(os.path.join(data_dir, 'train/trajs.npy'))
+    train_trajectories = train_trajectories[200:]
     val_trajectories = np.load(os.path.join(data_dir, 'val/trajs.npy'))
-    # Further split train into train and val, and let current val be test.
-    test_trajectories = val_trajectories
-    split_i = len(val_trajectories)
-    train_trajectories, val_trajectories = train_trajectories[split_i:], train_trajectories[:split_i]
+    # # Further split train into train and val, and let current val be test.
+    # test_trajectories = val_trajectories
+    # split_i = len(val_trajectories)
+    # train_trajectories, val_trajectories = train_trajectories[split_i:], train_trajectories[:split_i]
 
     generate_and_save_dataset(train_trajectories, os.path.join(output_dir, 'train'),
                               noise_augmentation=noise_augmentation,
-                              split='train', id_mapping=args.id_mapping, lang_aug=True)
+                              split='val', id_mapping=args.id_mapping, lang_aug=True)
 
-    generate_and_save_dataset(val_trajectories, os.path.join(output_dir, 'val'), split='val',
+    generate_and_save_dataset(val_trajectories, os.path.join(output_dir, 'val'), split='test',
                               id_mapping=args.id_mapping, lang_aug=True)
 
-    generate_and_save_dataset(test_trajectories, os.path.join(output_dir, 'test'), split='test',
-                              id_mapping=args.id_mapping, lang_aug=True)
+    # generate_and_save_dataset(test_trajectories, os.path.join(output_dir, 'test'), split='test',
+    #                           id_mapping=args.id_mapping, lang_aug=True)

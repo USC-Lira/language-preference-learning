@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
 
 from transformers import AutoModel, AutoTokenizer
 
@@ -38,10 +39,9 @@ def get_lang_feedback_aspect(feature_value, reward, noisy=False):
     potential = torch.tensor(reward * (1 - feature_value.numpy()))
     probs = torch.softmax(potential, dim=1)
     if noisy:
-        # add some noise to the probabilities
-        probs = probs + torch.randn_like(probs) * 1e-5
         # sample a language comparison with the probabilities
         idx = torch.multinomial(probs, 1).item()
+
     else:
         idx = torch.argmax(probs).item()
     return idx
@@ -49,14 +49,16 @@ def get_lang_feedback_aspect(feature_value, reward, noisy=False):
 
 def calculate_cross_entropy(p_probs, q_probs):
     # Ensure probabilities are within valid range
-    p_probs = torch.clamp(p_probs, 1e-15, 1 - 1e-15)
-    q_probs = torch.clamp(q_probs, 1e-15, 1 - 1e-15)
+    p_probs = torch.clamp(p_probs, 1e-6, 1 - 1e-6)
+    q_probs = torch.clamp(q_probs, 1e-6, 1 - 1e-6)
 
     # Calculate cross-entropy
+    # print(q_probs)
     cross_entropy = -(p_probs * torch.log(q_probs) + (1 - p_probs) * torch.log(1 - q_probs))
 
     # Sum over probabilities
     cross_entropy = torch.sum(cross_entropy)
+    assert cross_entropy is not torch.nan
 
     return cross_entropy.item()
 
@@ -64,11 +66,11 @@ def calculate_cross_entropy(p_probs, q_probs):
 def load_data(args, test=False):
     # Load the test trajectories and language comparisons
     if not test:
+        trajs = np.load(f'{args.data_dir}/train/trajs.npy')
+        nlcomps = json.load(open(f'{args.data_dir}/train/unique_nlcomps.json', 'rb'))
+    else:
         trajs = np.load(f'{args.data_dir}/val/trajs.npy')
         nlcomps = json.load(open(f'{args.data_dir}/val/unique_nlcomps.json', 'rb'))
-    else:
-        trajs = np.load(f'{args.data_dir}/test/trajs.npy')
-        nlcomps = json.load(open(f'{args.data_dir}/test/unique_nlcomps.json', 'rb'))
 
     if DEBUG:
         print("len of trajs: " + str(len(trajs)))
@@ -85,8 +87,8 @@ def load_data(args, test=False):
             print("length of trajs after using all datasets: " + str(len(trajs)))
 
     # need to run categorize.py first
-    greater_nlcomps = json.load(open(f'{args.data_dir}/val/greater_nlcomps.json', 'rb'))
-    less_nlcomps = json.load(open(f'{args.data_dir}/val/less_nlcomps.json', 'rb'))
+    greater_nlcomps = json.load(open(f'{args.data_dir}/train/greater_nlcomps.json', 'rb'))
+    less_nlcomps = json.load(open(f'{args.data_dir}/train/less_nlcomps.json', 'rb'))
     if DEBUG:
         print("greater nlcomps size: " + str(len(greater_nlcomps)))
         print("less nlcomps size: " + str(len(less_nlcomps)))
@@ -95,15 +97,16 @@ def load_data(args, test=False):
 
 
 def reconstruct_traj(traj_embed, model, nlcomp_embeds):
-    new_trajs = traj_embed + nlcomp_embeds
-    recon_trajs = model.traj_decoder(new_trajs)
-    return recon_trajs
+    new_trajs = torch.from_numpy(traj_embed) + nlcomp_embeds
+    recon_trajs = model.traj_decoder(new_trajs.to('cuda'))
+    return recon_trajs.detach().cpu().numpy()
 
 
-def _pref_learning(train_dataloader, test_dataloader, model, greater_nlcomps, less_nlcomps, learned_reward,
+def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nlcomps, less_nlcomps, learned_reward,
                    true_reward, traj_embeds, lang_embeds, test_traj_embeds, test_traj_true_rewards,
                    less_idx, optimizer, args):
     eval_cross_entropies = []
+    all_lang_feedback = []
     logsigmoid = nn.LogSigmoid()
     for train_data in train_dataloader:
         curr_traj, curr_feature_value, idx = train_data
@@ -113,24 +116,27 @@ def _pref_learning(train_dataloader, test_dataloader, model, greater_nlcomps, le
         feature_aspect_idx = get_lang_feedback_aspect(curr_feature_value, true_reward, args.use_softmax)
         if feature_aspect_idx in less_idx:
             # randomly choose from less_nlcomps
-            nlcomps = less_nlcomps[feature_aspects[feature_aspect_idx]]
+            nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
         else:
             # randomly choose from greater_nlcomps
-            nlcomps = greater_nlcomps[feature_aspects[feature_aspect_idx]]
+            nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
+
+        all_lang_feedback.append(nlcomp)
 
         # Get the feature of the language comparison
         # traj_feature = traj_embeds[idx]
-        nlcomp_features = torch.tensor([lang_embeds[nlcomps.index(nlcomp)] for nlcomp in nlcomps])
-        nlcomp_features_norm = torch.norm(nlcomp_features, dim=1, keepdim=True)
+        nlcomp_feature = torch.tensor([lang_embeds[nlcomps.index(nlcomp)] for nlcomp in all_lang_feedback])
+
+        # nlcomp_feature_norm = torch.norm(nlcomp_feature, dim=1, keepdim=True)
 
         # recon_trajs = reconstruct_traj(curr_traj_embed, model, nlcomp_features)
-        # true_recon_features = [get_feature_value(recon_traj) for recon_traj in recon_trajs]
+        # recon_features = np.array([get_feature_value(recon_traj, mean=False) for recon_traj in recon_trajs])
 
         for i in range(args.num_iterations):
             # Compute dot product of lang(traj_opt - traj_cur)
             # Minimize the negative dot product (loss)!
             # loss = torch.mean(torch.exp(learned_reward(nlcomp_features)) / (torch.exp(learned_reward(nlcomp_features)) + 1), dim=0)
-            loss = -logsigmoid(learned_reward(nlcomp_features)).mean()
+            loss = -logsigmoid(learned_reward(nlcomp_feature)).mean()
             # Backprop
             optimizer.zero_grad()
             loss.backward()
@@ -244,11 +250,21 @@ def run(args):
 
     test_traj_true_rewards = np.dot(test_feature_values, true_reward)
 
-    eval_cross_entropies = _pref_learning(train_data, test_data, nlcomps, greater_nlcomps, less_nlcomps, learned_reward,
+    eval_cross_entropies = _pref_learning(train_data, test_data, model, nlcomps, greater_nlcomps, less_nlcomps, learned_reward,
                                           true_reward, traj_embeds, lang_embeds, test_traj_embeds,
                                           test_traj_true_rewards,
                                           less_idx, optimizer, args)
+    print(len(eval_cross_entropies))
     print(eval_cross_entropies)
+    # plot the cross-entropies
+    plt.figure()
+    plt.plot(eval_cross_entropies)
+    plt.xlabel('Number of Queries')
+    plt.xticks(np.arange(0, len(eval_cross_entropies), 20))
+    plt.ylabel('Cross-Entropy')
+    plt.title(f'Noisy Feedback, True Dist: 0/1, {args.num_iterations} Iterations')
+    plt.savefig(f'cross_entropy_noisy_0_1_{args.num_iterations}_itrs.png')
+    plt.show()
 
 
 if __name__ == "__main__":
