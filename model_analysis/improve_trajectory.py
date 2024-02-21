@@ -23,9 +23,9 @@ def initialize_reward(num_features):
     return reward_func
 
 
-def get_feature_value(traj, mean=True):
+def get_feature_value(traj, traj_mean=False):
     # Get feature values for each timestep
-    if not mean:
+    if traj_mean:
         features_values = np.array([gt_reward(traj), speed(traj), height(traj), distance_to_cube(traj),
                                     distance_to_bottle(traj)])
         return features_values

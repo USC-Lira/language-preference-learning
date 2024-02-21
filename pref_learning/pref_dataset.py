@@ -15,7 +15,7 @@ class PrefDataset(Dataset):
         return traj, feature_value, idx
 
 
-class EvaluationDataset(Dataset):
+class EvalDataset(Dataset):
     def __init__(self, trajs):
         self.trajs = trajs
         self.traj_pairs = [(i, j) for i in range(len(trajs)) for j in range(i+1, len(trajs))]
