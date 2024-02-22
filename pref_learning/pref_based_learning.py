@@ -26,7 +26,7 @@ def init_weights_with_norm_one(m):
     if isinstance(m, nn.Linear):  # Check if the module is a linear layer
         weight_shape = m.weight.size()
         # Initialize weights with a standard method
-        weights = torch.normal(mean=0, std=0.01, size=weight_shape)
+        weights = torch.normal(mean=0, std=0.05, size=weight_shape)
         # Normalize weights to have a norm of 1
         # weights /= weights.norm(2)  # Adjust this if you need a different norm
         m.weight.data = weights
@@ -49,31 +49,36 @@ def get_lang_feedback_aspect(curr_feature, reward, optimal_traj_feature, noisy=F
     """
     Get language feedback based on feature value and true reward function
     """
-    potential_pos = torch.tensor((optimal_traj_feature - curr_feature.numpy()))
-    potential_neg = torch.tensor((curr_feature.numpy() - optimal_traj_feature))
-    potential = torch.cat([potential_pos, potential_neg], dim=1)
-    potential = potential / temperature
-    probs = torch.softmax(potential, dim=1)
-    if noisy:
-        # sample a language comparison with the probabilities
-        idx = torch.multinomial(probs, 1).item()
-        feature_idx = idx % 5
-        pos = idx // 5
-        # pos_prob = reward[idx]
-        # if np.random.rand() < pos_prob:
-        #     pos = True
-        # else:
-        #     pos = False
-    else:
-        idx = torch.argmax(probs).item()
-        feature_idx = idx % 5
-        pos = idx // 5
-    # probs = torch.softmax(torch.from_numpy(reward), dim=0)
-    # feature_idx = torch.multinomial(probs, 1).item()
-    # if optimal_traj_feature[feature_idx] > curr_feature[0, feature_idx]:
-    #     pos = True
+    # potential_pos = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
+    # potential_neg = torch.tensor(reward * (curr_feature.numpy() - optimal_traj_feature))
+    # potential = torch.cat([potential_pos, potential_neg], dim=1)
+    # potential = potential / temperature
+    # probs = torch.softmax(potential, dim=1)
+    # if noisy:
+    #     # sample a language comparison with the probabilities
+    #     idx = torch.multinomial(probs, 1).item()
+    #     feature_idx = idx % 5
+    #     pos = idx // 5
+    #     # pos_prob = reward[idx]
+    #     # if np.random.rand() < pos_prob:
+    #     #     pos = True
+    #     # else:
+    #     #     pos = False
     # else:
-    #     pos = False
+    #     idx = torch.argmax(probs).item()
+    #     feature_idx = idx % 5
+    #     pos = idx // 5
+    # probs = torch.softmax(torch.from_numpy(reward), dim=0)
+    reward = torch.from_numpy(reward)
+    probs = torch.abs(reward) / torch.sum(torch.abs(reward))
+    if noisy:
+        feature_idx = torch.multinomial(probs, 1).item()
+    else:
+        feature_idx = torch.argmax(probs).item()
+    if reward[feature_idx] > 0:
+        pos = True
+    else:
+        pos = False
     return feature_idx, pos
 
 
@@ -120,7 +125,7 @@ def reconstruct_traj(traj_embeds, model, nlcomp_embeds):
 
 def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nlcomps, less_nlcomps, learned_reward,
                    true_reward, traj_embeds, lang_embeds, test_traj_embeds, test_traj_true_rewards,
-                   less_idx, optimizer, args, optimal_traj_feature, feature_mins, feature_maxs, DEBUG=False):
+                   optimizer, args, optimal_traj_feature, feature_scale_factor, DEBUG=False):
     # Transform numpy array to torch tensor (improve this with a function)
     traj_embeds = torch.from_numpy(traj_embeds)
 
@@ -153,23 +158,23 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
         feature_aspect_idx, pos = get_lang_feedback_aspect(curr_feature_value, true_reward, optimal_traj_feature,
                                                            args.use_softmax, temperature=0.5)
 
-        # if pos:
-        #     nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
-        # else:
-        #     nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
-
-        if feature_aspect_idx in less_idx:
-            # randomly choose from less_nlcomps
-            if pos:
-                nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
-            else:
-                nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
+        if pos:
+            nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
         else:
-            # randomly choose from greater_nlcomps
-            if pos:
-                nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
-            else:
-                nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
+            nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
+
+        # if feature_aspect_idx in less_idx:
+        #     # randomly choose from less_nlcomps
+        #     if pos:
+        #         nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
+        #     else:
+        #         nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
+        # else:
+        #     # randomly choose from greater_nlcomps
+        #     if pos:
+        #         nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
+        #     else:
+        #         nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
 
         all_lang_feedback.append(nlcomp)
 
@@ -181,16 +186,12 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
             nlcomp_feature_norm = torch.norm(nlcomp_features, dim=1, keepdim=True)
             print("nlcomp_feature_norm: ", nlcomp_feature_norm)
 
-        # recon_trajs = reconstruct_traj(np.array(), model, nlcomp_features)
-        # recon_features = np.array([get_feature_value(recon_traj, traj_mean=True) for recon_traj in recon_trajs])
-        # recon_features = (recon_features - feature_mins) / (feature_maxs - feature_mins)
-
         for i in range(args.num_iterations):
             # Compute dot product of lang(traj_opt - traj_cur)
             # Minimize the negative dot product (loss)!
             loss = -logsigmoid(learned_reward(nlcomp_features)).mean()
-            loss += F.mse_loss(torch.concat(sampled_traj_true_rewards).float(),
-                               learned_reward(torch.concat(sampled_traj_embeds)).float())
+            # loss += F.mse_loss(torch.concat(sampled_traj_true_rewards).float(),
+            #                    learned_reward(torch.concat(sampled_traj_embeds)).float())
             # Backprop
             optimizer.zero_grad()
             loss.backward()
@@ -199,8 +200,11 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
         print(f'Loss: {loss.item()}, Norm of learned reward: {torch.norm(learned_reward.linear.weight)}')
         learned_reward_norms.append(torch.norm(learned_reward.linear.weight).item())
 
+        # norm_scale_factor = np.linalg.norm(true_reward) / torch.norm(learned_reward.linear.weight).item()
         # Evaluation
-        cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds, test=False)
+        cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds,
+                                 scale_factor=feature_scale_factor)
+
         eval_cross_entropies.append(cross_entropy)
 
         # Fine the optimal trajectory with learned reward
@@ -220,7 +224,21 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
     return return_dict
 
 
-def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, test=False):
+def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, scale_factor=1.0, test=False):
+    """
+    Evaluate the cross-entropy between the learned and true distributions
+
+    Input:
+        - test_dataloader: DataLoader for the test data
+        - true_traj_rewards: true rewards of the test trajectories
+        - learned_reward: the learned reward function
+        - traj_embeds: the embeddings of the test trajectories
+        - feature_scale_factor: the scale factor for the learned reward
+        - test: whether to use the true reward for evaluation
+
+    Output:
+        - total_cross_entropy: the average cross-entropy between the learned and true distributions
+    """
     total_cross_entropy = AverageMeter('cross-entropy')
     bce_loss = nn.BCELoss()
     for i, test_data in enumerate(test_dataloader):
@@ -240,8 +258,7 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, te
         traj_a_embed = torch.tensor(traj_a_embed)
         traj_b_embed = torch.tensor(traj_b_embed)
         learned_rewards = torch.tensor([learned_reward(traj_a_embed), learned_reward(traj_b_embed)])
-        learned_probs = torch.softmax(learned_rewards, dim=0)
-        print('True probs:', true_probs)
+        learned_probs = torch.softmax(learned_rewards * scale_factor, dim=0)
         if test:
             learned_probs = true_probs
 
@@ -255,9 +272,9 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, te
 def run(args):
     np.random.seed(args.seed)
 
-    # true_reward = initialize_reward(5)
+    true_reward = initialize_reward(5)
     # For now fixed true reward
-    true_reward = np.array([0.2, 0.1, 0.3, 0.35, 0.05])
+    # true_reward = np.array([0.2, 0.1, 0.3, 0.35, 0.05])
 
     # Load train data
     train_trajs, train_nlcomps, train_nlcomps_embed, train_greater_nlcomps, train_less_nlcomps = load_data(args)
@@ -268,18 +285,16 @@ def run(args):
     test_feature_values = np.array([get_feature_value(traj) for traj in test_trajs])
 
     all_features = np.concatenate([train_feature_values, test_feature_values], axis=0)
-    feature_value_mins = np.min(all_features, axis=0)
-    feature_value_maxs = np.max(all_features, axis=0)
+    # feature_value_mins = np.min(all_features, axis=0)
+    # feature_value_maxs = np.max(all_features, axis=0)
+    feature_value_means = np.mean(all_features, axis=0)
+    feature_value_stds = np.std(all_features, axis=0)
 
     # Normalize the feature values
-    train_feature_values = (train_feature_values - feature_value_mins) / (feature_value_maxs - feature_value_mins)
-    test_feature_values = (test_feature_values - feature_value_mins) / (feature_value_maxs - feature_value_mins)
-
-    # Flip the feature values for distance to cube and distance to bottle
-    less_idx = [3, 4]
-    for i in less_idx:
-        train_feature_values[:, i] = 1 - train_feature_values[:, i]
-        test_feature_values[:, i] = 1 - test_feature_values[:, i]
+    # train_feature_values = (train_feature_values - feature_value_mins) / (feature_value_maxs - feature_value_mins)
+    # test_feature_values = (test_feature_values - feature_value_mins) / (feature_value_maxs - feature_value_mins)
+    train_feature_values = (train_feature_values - feature_value_means) / feature_value_stds
+    test_feature_values = (test_feature_values - feature_value_means) / feature_value_stds
 
     train_traj_true_rewards = np.dot(train_feature_values, true_reward)
     test_traj_true_rewards = np.dot(test_feature_values, true_reward)
@@ -334,56 +349,91 @@ def run(args):
                                                               args.use_bert_encoder, tokenizer,
                                                               nlcomps_bert_embeds=test_nlcomps_embed)
 
+    print("Mean Norm of Traj Embeds:", np.linalg.norm(train_traj_embeds, axis=1).mean())
+    print("Mean Norm of Lang Embeds:", np.linalg.norm(train_lang_embeds, axis=1).mean())
+    print('Norm of feature values:', np.linalg.norm(train_feature_values, axis=1).mean())
+
+    feature_scale_factor = np.linalg.norm(train_feature_values, axis=1).mean() / np.linalg.norm(train_traj_embeds,
+                                                                                                axis=1).mean()
+
     # Random init learned reward
     learned_reward = RewardFunc(feature_dim, 1)
     optimizer = torch.optim.SGD(learned_reward.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    # Test the entropy of test data
+    test_entropy = evaluate(test_data, test_traj_true_rewards, learned_reward, test_traj_embeds, test=True)
+    print("Test Cross Entropy:", test_entropy)
 
     # Load optimal trajectory given the true reward
     optimal_traj = np.load(f'{args.optimal_traj_dir}/traj.npy').reshape(500, 69)
     optimal_traj_feature = get_feature_value(optimal_traj)
     # Normalize the feature value
-    optimal_traj_feature = (optimal_traj_feature - feature_value_mins) / (feature_value_maxs - feature_value_mins)
+    # optimal_traj_feature = (optimal_traj_feature - feature_value_means) / feature_value_stds
 
     results = _pref_learning(train_data, test_data, model, train_nlcomps, train_greater_nlcomps, train_less_nlcomps,
                              learned_reward, true_reward, train_traj_embeds, train_lang_embeds, test_traj_embeds,
-                             test_traj_true_rewards,
-                             less_idx, optimizer, args, optimal_traj_feature,
-                             feature_value_mins, feature_value_maxs)
+                             test_traj_true_rewards, optimizer, args, optimal_traj_feature, feature_scale_factor)
 
     eval_cross_entropies = results['cross_entropy']
     learned_reward_norms = results['learned_reward_norms']
 
-    # plot the cross-entropies
-    plt.figure()
-    plt.plot(eval_cross_entropies)
-    plt.xlabel('Number of Queries')
-    plt.xticks(np.arange(0, len(eval_cross_entropies), 20))
-    plt.ylabel('Cross-Entropy')
-    plt.title(f'Noisy Feedback, True Dist: Softmax, {args.num_iterations} Iterations')
-    # plt.savefig(f'cross_entropy_noisy_softmax_{args.num_iterations}_itrs.png')
-    plt.show()
+    noise = "Noiseless" if not args.use_softmax else "Noisy"
 
-    plt.figure()
-    plt.plot(learned_reward_norms)
-    plt.xlabel('Number of Queries')
-    plt.xticks(np.arange(0, len(learned_reward_norms), 20))
-    plt.ylabel('Norm of Learned Reward')
-    plt.title(f'Noisy Feedback, True Dist: Softmax, {args.num_iterations} Iterations')
-    # plt.savefig(f'learned_reward_norm_noisy_softmax_{args.num_iterations}_itrs.png')
-    plt.show()
+    # Plot cross-entropies, learned reward norms, and optimal rewards in one figure
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+    ax1.plot(eval_cross_entropies)
+    ax1.set_xlabel('Number of Queries')
+    ax1.set_ylabel('Cross-Entropy')
+    ax1.set_title(f'{noise} Feedback, True Dist: Softmax, {args.num_iterations} Iterations')
+
+    # ax2.plot(learned_reward_norms)
+    # ax2.set_xlabel('Number of Queries')
+    # ax2.set_ylabel('Norm of Learned Reward')
+    # ax2.set_title(f'Noisy Feedback, True Dist: Softmax, {args.num_iterations} Iterations')
 
     optimal_learned_rewards = results['optimal_learned_rewards']
     optimal_true_rewards = results['optimal_true_rewards']
-    plt.figure()
-    plt.plot(optimal_learned_rewards, label='Learned Reward')
-    plt.plot(optimal_true_rewards, label='True Reward', c='r')
-    plt.xlabel('Number of Queries')
-    plt.xticks(np.arange(0, len(optimal_learned_rewards), 20))
-    plt.ylabel('Reward')
-    plt.title(f'The Reward of Optimal Trajectory')
-    plt.legend()
+    ax2.plot(optimal_learned_rewards, label='Learned Reward')
+    ax2.plot(optimal_true_rewards, label='True Reward', c='r')
+    ax2.set_xlabel('Number of Queries')
+    ax2.set_ylabel('Reward Value')
+    ax2.set_title(f'True Reward of Optimal Trajectory')
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.savefig(f'{noise}_softmax_{args.num_iterations}_itrs.png')
+
+    # # plot the cross-entropies
+    # plt.figure()
+    # plt.plot(eval_cross_entropies)
+    # plt.xlabel('Number of Queries')
+    # plt.xticks(np.arange(0, len(eval_cross_entropies), 20))
+    # plt.ylabel('Cross-Entropy')
+    # plt.title(f'Noisy Feedback, True Dist: Softmax, {args.num_iterations} Iterations')
+    # # plt.savefig(f'cross_entropy_noisy_softmax_{args.num_iterations}_itrs.png')
+    # # plt.show()
+
+    # plt.figure()
+    # plt.plot(learned_reward_norms)
+    # plt.xlabel('Number of Queries')
+    # plt.xticks(np.arange(0, len(learned_reward_norms), 20))
+    # plt.ylabel('Norm of Learned Reward')
+    # plt.title(f'Noisy Feedback, True Dist: Softmax, {args.num_iterations} Iterations')
+    # # plt.savefig(f'learned_reward_norm_noisy_softmax_{args.num_iterations}_itrs.png')
+    # # plt.show()
+
+    # optimal_learned_rewards = results['optimal_learned_rewards']
+    # optimal_true_rewards = results['optimal_true_rewards']
+    # plt.figure()
+    # plt.plot(optimal_learned_rewards, label='Learned Reward')
+    # plt.plot(optimal_true_rewards, label='True Reward', c='r')
+    # plt.xlabel('Number of Queries')
+    # plt.xticks(np.arange(0, len(optimal_learned_rewards), 20))
+    # plt.ylabel('Reward')
+    # plt.title(f'The Reward of Optimal Trajectory')
+    # plt.legend()
     # plt.savefig(f'optimal_rewards_noisy_softmax_{args.num_iterations}_itrs.png')
-    plt.show()
+    # plt.show()
 
 
 if __name__ == "__main__":

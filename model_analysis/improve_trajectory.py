@@ -16,10 +16,10 @@ from model_analysis.utils import get_traj_lang_embeds, get_lang_embed
 def initialize_reward(num_features):
     # Randomly initialize weight for each feature
     # All weights sum to 1
-    reward_func = np.random.rand(num_features)
-    reward_func /= np.sum(reward_func)
-    # # Randomly assign + or - to each weight， + means greater, - means less
-    # reward_func = np.random.choice([-1, 1], size=num_features) * reward_func
+    reward_func = np.random.normal(loc=0, scale=1.0, size=num_features)
+    # reward_func /= np.sum(reward_func)
+    # Randomly assign + or - to each weight， + means greater, - means less
+    reward_func = np.random.choice([-1, 1], size=num_features) * reward_func
     return reward_func
 
 
