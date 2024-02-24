@@ -48,37 +48,45 @@ class RewardFunc(nn.Module):
 def get_lang_feedback_aspect(curr_feature, reward, optimal_traj_feature, noisy=False, temperature=1.0):
     """
     Get language feedback based on feature value and true reward function
+
+    Args:
+        curr_feature: the feature value of the current trajectory
+        reward: the true reward function
+        optimal_traj_feature: the feature value of the optimal trajectory
+        noisy: whether to add noise to the feedback
+        temperature: the temperature for the softmax
+
+    Returns:
+        feature_idx: the index of the feature to give feedback on
+        pos: whether the feedback is positive or negative
     """
     # potential_pos = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
     # potential_neg = torch.tensor(reward * (curr_feature.numpy() - optimal_traj_feature))
     # potential = torch.cat([potential_pos, potential_neg], dim=1)
-    # potential = potential / temperature
-    # probs = torch.softmax(potential, dim=1)
-    # if noisy:
-    #     # sample a language comparison with the probabilities
-    #     idx = torch.multinomial(probs, 1).item()
-    #     feature_idx = idx % 5
-    #     pos = idx // 5
-    #     # pos_prob = reward[idx]
-    #     # if np.random.rand() < pos_prob:
-    #     #     pos = True
-    #     # else:
-    #     #     pos = False
-    # else:
-    #     idx = torch.argmax(probs).item()
-    #     feature_idx = idx % 5
-    #     pos = idx // 5
-    # probs = torch.softmax(torch.from_numpy(reward), dim=0)
-    reward = torch.from_numpy(reward)
-    probs = torch.abs(reward) / torch.sum(torch.abs(reward))
+    potential = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
+    potential = potential / temperature
+    probs = torch.softmax(potential, dim=1)
     if noisy:
+        # sample a language comparison with the probabilities
         feature_idx = torch.multinomial(probs, 1).item()
     else:
         feature_idx = torch.argmax(probs).item()
-    if reward[feature_idx] > 0:
+    if optimal_traj_feature[feature_idx] - curr_feature[0, feature_idx] > 0:
         pos = True
     else:
         pos = False
+
+    # probs = torch.softmax(torch.from_numpy(reward), dim=0)
+    # reward = torch.from_numpy(reward)
+    # probs = torch.abs(reward) / torch.sum(torch.abs(reward))
+    # if noisy:
+    #     feature_idx = torch.multinomial(probs, 1).item()
+    # else:
+    #     feature_idx = torch.argmax(probs).item()
+    # if reward[feature_idx] > 0:
+    #     pos = True
+    # else:
+    #     pos = False
     return feature_idx, pos
 
 
@@ -156,7 +164,7 @@ def _pref_learning(train_dataloader, test_dataloader, model, nlcomps, greater_nl
         # Use true reward func to get language feedback (select from set)
         # First find the feature aspect to give feedback on and positive / negative
         feature_aspect_idx, pos = get_lang_feedback_aspect(curr_feature_value, true_reward, optimal_traj_feature,
-                                                           args.use_softmax, temperature=0.5)
+                                                           args.use_softmax, temperature=0.2)
 
         if pos:
             nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
@@ -272,9 +280,8 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, sc
 def run(args):
     np.random.seed(args.seed)
 
-    true_reward = initialize_reward(5)
-    # For now fixed true reward
-    # true_reward = np.array([0.2, 0.1, 0.3, 0.35, 0.05])
+    # Load the weight of true reward
+    true_reward = np.load(f'{args.true_reward_dir}/true_rewards.npy')
 
     # Load train data
     train_trajs, train_nlcomps, train_nlcomps_embed, train_greater_nlcomps, train_less_nlcomps = load_data(args)
@@ -365,7 +372,7 @@ def run(args):
     print("Test Cross Entropy:", test_entropy)
 
     # Load optimal trajectory given the true reward
-    optimal_traj = np.load(f'{args.optimal_traj_dir}/traj.npy').reshape(500, 69)
+    optimal_traj = np.load(f'{args.true_reward_dir}/traj.npy').reshape(500, 69)
     optimal_traj_feature = get_feature_value(optimal_traj)
     # Normalize the feature value
     # optimal_traj_feature = (optimal_traj_feature - feature_value_means) / feature_value_stds
@@ -441,8 +448,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--data-dir', type=str, default='data', help='')
     parser.add_argument('--model-dir', type=str, default='models', help='')
-    parser.add_argument('--optimal-traj-dir', type=str, default='optim_traj',
-                        help='the directory of saved optimal trajs')
+    parser.add_argument('--true-reward-dir', type=str, default='true_rewards/0',
+                        help='the directory of trajectories and true rewards')
     parser.add_argument('--old-model', action="store_true", help='whether to use old model')
     parser.add_argument('--num-batches', type=int, default=2, help='')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
