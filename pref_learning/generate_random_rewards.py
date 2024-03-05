@@ -15,9 +15,16 @@ parser.add_argument('--bert-model', type=str, default='bert-tiny', help='which B
 args = parser.parse_args()
 
 # Load the data
-train_trajs, train_nlcomps, train_nlcomps_embed, train_greater_nlcomps, train_less_nlcomps = load_data(args)
+train_data_dict = load_data(args)
+train_trajs = train_data_dict['trajs']
+train_nlcomps, train_nlcomps_embed = train_data_dict['nlcomps'], train_data_dict['nlcomp_embeds']
+train_greater_nlcomps, train_less_nlcomps = train_data_dict['greater_nlcomps'], train_data_dict['less_nlcomps']
+train_classified_nlcomps = train_data_dict['classified_nlcomps']
 train_feature_values = np.array([get_feature_value(traj) for traj in train_trajs])
-test_trajs, test_nlcomps, test_nlcomps_embed, test_greater_nlcomps, test_less_nlcomps = load_data(args, test=True)
+
+test_data_dict = load_data(args, test=True)
+test_trajs = test_data_dict['trajs']
+test_nlcomps, test_nlcomps_embed = test_data_dict['nlcomps'], test_data_dict['nlcomp_embeds']
 test_feature_values = np.array([get_feature_value(traj) for traj in test_trajs])
 test_dataset = EvalDataset(test_trajs)
 test_data = DataLoader(test_dataset, batch_size=1, shuffle=False)

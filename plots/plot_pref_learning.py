@@ -33,8 +33,8 @@ def plot(base_data_dir):
 
     for i in range(3):
         data_dir = f'{base_data_dir}/{i}/pref_learning'
-        noisy_results = np.load(f'{data_dir}/pref_learning_results_noisy.npz')
-        noiseless_results = np.load(f'{data_dir}/pref_learning_results_noiseless.npz')
+        noisy_results = np.load(f'{data_dir}/pref_learning_results_noisy_other_feedback_10.npz')
+        noiseless_results = np.load(f'{data_dir}/pref_learning_results_noiseless_other_feedback_10.npz')
 
         total_noisy_results = get_data(noisy_results, total_noisy_results)
         total_noiseless_results = get_data(noiseless_results, total_noiseless_results)
@@ -63,6 +63,7 @@ def plot(base_data_dir):
                      alpha=0.2)
     ax1.set_xlabel('Number of Queries')
     ax1.set_ylabel('Cross-Entropy')
+    ax1.legend()
 
     ax2.plot([0, len(total_noisy_results['all_optimal_true_rewards'][0]) - 1],
              [np.mean(total_noisy_results['all_optimal_true_rewards']),
@@ -91,7 +92,7 @@ def plot(base_data_dir):
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig(f'pref_learning.png')
+    plt.savefig(f'pref_learning_other_feedback_10.png')
 
 
 if __name__ == '__main__':
