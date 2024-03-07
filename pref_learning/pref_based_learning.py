@@ -226,7 +226,7 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
             # where n is the number of other language feedback
             if args.use_other_feedback:
                 nlcomp_features_expand = nlcomp_features.unsqueeze(1).expand(-1, other_nlcomp_features.shape[1], -1)
-                loss_lang_pref = -logsigmoid(learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)).mean()
+                loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / args.lang_temp).mean()
                 loss += loss_lang_pref
 
             # Backprop
@@ -236,7 +236,7 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
             if lr_scheduler is not None:
                 lr_scheduler.step()
 
-        print(f'Loss: {loss.item()}, Norm of learned reward: {torch.norm(learned_reward.linear.weight)}')
+        print(f'Loss: {loss.item():.4f}, Norm of learned reward: {torch.norm(learned_reward.linear.weight):.4f}')
         learned_reward_norms.append(torch.norm(learned_reward.linear.weight).item())
 
         # norm_scale_factor = np.linalg.norm(true_reward) / torch.norm(learned_reward.linear.weight).item()
@@ -506,6 +506,7 @@ if __name__ == "__main__":
     parser.add_argument('--use-softmax', action="store_true", help='whether to use softmax or argmax for feedback')
     parser.add_argument('--use-other-feedback', action="store_true", help='whether to use other feedback')
     parser.add_argument('--num-other-feedback', default=1, type=int, help='number of other feedback to use')
+    parser.add_argument('--lang-temp', default=1.0, type=float, help='temperature for compare with other language feedback')
 
     args = parser.parse_args()
     run(args)
