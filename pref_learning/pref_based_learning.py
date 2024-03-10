@@ -226,7 +226,18 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
             # where n is the number of other language feedback
             if args.use_other_feedback:
                 nlcomp_features_expand = nlcomp_features.unsqueeze(1).expand(-1, other_nlcomp_features.shape[1], -1)
-                loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / args.lang_temp).mean()
+                if args.use_constant_temp:
+                    loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / args.lang_temp).mean()
+                else:
+                    # Compute the cosine similarity between the language feedback and the other language feedback
+                    cos_sim = F.cosine_similarity(nlcomp_features_expand, other_nlcomp_features, dim=2)
+                    # Transform cosine similarity to temperature
+                    # temp_cos_sim = (1 - cos_sim) / 2
+                    temp_cos_sim = 1 / (1 + torch.exp(5 * cos_sim))
+                    temp_cos_sim = temp_cos_sim.unsqueeze(2)
+                    # Compute the preference loss
+                    loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / temp_cos_sim).mean()
+
                 loss += loss_lang_pref
 
             # Backprop
@@ -322,7 +333,7 @@ def save_results(args, results, postfix='noisy'):
         'optimal_true_rewards': optimal_true_rewards
     }
 
-    np.savez(f'{save_dir}/pref_learning_results_{postfix}.npz', **result_dict)
+    np.savez(f'{save_dir}/{postfix}.npz', **result_dict)
 
 
 def run(args):
@@ -471,13 +482,20 @@ def run(args):
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig(f'{args.true_reward_dir}/pref_learning/lang_pref_random_temp_1.0.png')
+    plt.savefig(f'{args.true_reward_dir}/pref_learning/lang_pref.png')
 
     postfix_noisy = 'noisy'
     postfix_noiseless = 'noiseless'
     if args.use_other_feedback:
         postfix_noisy += '_other_feedback_' + str(args.num_other_feedback)
         postfix_noiseless += '_other_feedback_' + str(args.num_other_feedback)
+        if args.use_constant_temp:
+            postfix_noisy += f'_temp_{args.lang_temp}'
+            postfix_noiseless += f'_temp_{args.lang_temp}'
+        else:
+            postfix_noisy += '_temp_cos'
+            postfix_noiseless += '_temp_cos'
+
     save_results(args, noisy_results, postfix=postfix_noisy)
     save_results(args, noiseless_results, postfix=postfix_noiseless)
 
@@ -506,6 +524,8 @@ if __name__ == "__main__":
     parser.add_argument('--use-softmax', action="store_true", help='whether to use softmax or argmax for feedback')
     parser.add_argument('--use-other-feedback', action="store_true", help='whether to use other feedback')
     parser.add_argument('--num-other-feedback', default=1, type=int, help='number of other feedback to use')
+    parser.add_argument('--coeff-other-feedback', default=1.0, type=float, help='coefficient for loss of other feedback')
+    parser.add_argument('--use-constant-temp', action="store_true", help='whether to use constant temperature')
     parser.add_argument('--lang-temp', default=1.0, type=float, help='temperature for compare with other language feedback')
 
     args = parser.parse_args()
