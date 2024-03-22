@@ -76,17 +76,6 @@ def get_lang_feedback_aspect(curr_feature, reward, optimal_traj_feature, noisy=F
     else:
         pos = False
 
-    # reward = torch.from_numpy(reward)
-    # probs = torch.abs(reward) / torch.sum(torch.abs(reward))
-    # if noisy:
-    #     feature_idx = torch.multinomial(probs, 1).item()
-    # else:
-    #     feature_idx = torch.argmax(probs).item()
-    # if reward[feature_idx] > 0:
-    #     pos = True
-    # else:
-    #     pos = False
-
     return feature_idx, pos
 
 
@@ -143,7 +132,7 @@ def get_optimal_traj(learned_reward, traj_embeds, traj_true_rewards):
 def _pref_learning(args, train_dataloader, test_dataloader, model,
                    nlcomps, greater_nlcomps, less_nlcomps, classified_nlcomps,
                    learned_reward, true_reward, traj_embeds, lang_embeds, test_traj_embeds, test_traj_true_rewards,
-                   optimal_traj_feature, optimizer, lr_scheduler=None, feature_scale_factor=1.0, DEBUG=False):
+                   optimal_traj_feature, optimizer, lr_scheduler=None, DEBUG=False):
     # Transform numpy array to torch tensor (improve this with a function)
     traj_embeds = torch.from_numpy(traj_embeds)
 
@@ -185,25 +174,13 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
         nlcomp_features = torch.concat([torch.from_numpy(lang_embeds[nlcomps.index(nlcomp)]).view(1, -1)
                                         for nlcomp in all_lang_feedback], dim=0)
 
-        # Get feedback for other features
+        # Randomly sample feedback for other features in the training set
         if args.use_other_feedback:
-            # other_nlcomps_pos, other_nlcomps_neg = [], []
-            # for i in range(len(feature_aspects)):
-            #     if i != feature_aspect_idx:
-            #         other_nlcomps_pos.extend(greater_nlcomps[feature_aspects[i]])
-            #         other_nlcomps_neg.extend(less_nlcomps[feature_aspects[i]])
-            #
-            # # Sample k other feedback
-            # sampled_nlcomps_pos = np.random.choice(other_nlcomps_pos, args.num_other_feedback, replace=False)
-            # sampled_nlcomps_neg = np.random.choice(other_nlcomps_neg, args.num_other_feedback, replace=False)
-            # sampled_nlcomps_pos_feats = [lang_embeds[nlcomps.index(nlcomp)] for nlcomp in sampled_nlcomps_pos]
-            # sampled_nlcomps_neg_feats = [lang_embeds[nlcomps.index(nlcomp)] for nlcomp in sampled_nlcomps_neg]
-            # all_other_language_feedback_feats.append(sampled_nlcomps_pos_feats + sampled_nlcomps_neg_feats)
-
             other_nlcomps = []
             for i in range(len(feature_aspects)):
                 if i != feature_aspect_idx:
                     other_nlcomps.extend(classified_nlcomps[feature_aspects[i]])
+
             sampled_nlcomps = np.random.choice(other_nlcomps, args.num_other_feedback, replace=False)
             all_other_language_feedback_feats.append([lang_embeds[nlcomps.index(nlcomp)] for nlcomp in sampled_nlcomps])
         
@@ -233,12 +210,12 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
                     cos_sim = F.cosine_similarity(nlcomp_features_expand, other_nlcomp_features, dim=2)
                     # Transform cosine similarity to temperature
                     # temp_cos_sim = (1 - cos_sim) / 2
-                    temp_cos_sim = 1 / (1 + torch.exp(5 * cos_sim))
+                    temp_cos_sim = 1 / (1 + torch.exp(-5 * cos_sim))
                     temp_cos_sim = temp_cos_sim.unsqueeze(2)
                     # Compute the preference loss
                     loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / temp_cos_sim).mean()
 
-                loss += loss_lang_pref
+                loss += args.lang_loss_coeff * loss_lang_pref
 
             # Backprop
             optimizer.zero_grad()
@@ -252,8 +229,7 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
 
         # norm_scale_factor = np.linalg.norm(true_reward) / torch.norm(learned_reward.linear.weight).item()
         # Evaluation
-        cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds,
-                                 scale_factor=feature_scale_factor)
+        cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
 
         eval_cross_entropies.append(cross_entropy)
         optimal_learned_reward, optimal_true_reward = get_optimal_traj(learned_reward, test_traj_embeds,
@@ -270,7 +246,7 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
     return return_dict
 
 
-def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, scale_factor=1.0, test=False):
+def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, test=False):
     """
     Evaluate the cross-entropy between the learned and true distributions
 
@@ -308,7 +284,7 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, sc
             traj_a_embed = torch.tensor(traj_a_embed)
             traj_b_embed = torch.tensor(traj_b_embed)
             learned_rewards = torch.tensor([learned_reward(traj_a_embed), learned_reward(traj_b_embed)])
-            learned_probs = torch.softmax(learned_rewards * scale_factor, dim=0)
+            learned_probs = torch.softmax(learned_rewards, dim=0)
 
         # calculate cross-entropy between learned and true distributions
         cross_entropy = bce_loss(learned_probs, true_probs)
@@ -483,6 +459,7 @@ def run(args):
 
     plt.tight_layout()
     plt.savefig(f'{args.true_reward_dir}/pref_learning/lang_pref.png')
+    plt.show()
 
     postfix_noisy = 'noisy'
     postfix_noiseless = 'noiseless'
@@ -490,11 +467,11 @@ def run(args):
         postfix_noisy += '_other_feedback_' + str(args.num_other_feedback)
         postfix_noiseless += '_other_feedback_' + str(args.num_other_feedback)
         if args.use_constant_temp:
-            postfix_noisy += f'_temp_{args.lang_temp}'
-            postfix_noiseless += f'_temp_{args.lang_temp}'
+            postfix_noisy += f'_temp_{args.lang_temp}' + f"_lc_{args.lang_loss_coeff}"
+            postfix_noiseless += f'_temp_{args.lang_temp}' + f"_lc_{args.lang_loss_coeff}"
         else:
-            postfix_noisy += '_temp_cos'
-            postfix_noiseless += '_temp_cos'
+            postfix_noisy += '_temp_cos' + f"_lc_{args.lang_loss_coeff}"
+            postfix_noiseless += '_temp_cos' + f"_lc_{args.lang_loss_coeff}"
 
     save_results(args, noisy_results, postfix=postfix_noisy)
     save_results(args, noiseless_results, postfix=postfix_noiseless)
@@ -527,6 +504,7 @@ if __name__ == "__main__":
     parser.add_argument('--coeff-other-feedback', default=1.0, type=float, help='coefficient for loss of other feedback')
     parser.add_argument('--use-constant-temp', action="store_true", help='whether to use constant temperature')
     parser.add_argument('--lang-temp', default=1.0, type=float, help='temperature for compare with other language feedback')
+    parser.add_argument('--lang-loss-coeff', default=1.0, type=float, help='coefficient for language preference loss')
 
     args = parser.parse_args()
     run(args)

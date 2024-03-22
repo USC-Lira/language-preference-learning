@@ -58,128 +58,53 @@ def plot(base_data_dir):
     noisy_results_other_feedback, noiseless_results_other_feedback = load_results(base_data_dir,
                                                                                   'other_feedback_10_temp_1.0')
     noisy_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos = load_results(base_data_dir,
-                                                                                                          'other_feedback_10_temp_cos')
+                                                                                                          'other_feedback_10_temp_cos_lc_1.0')
+    # noisy_results_other_feedback_10_temp_cos_lc, noiseless_results_other_feedback_10_temp_cos_lc = load_results(
+    #     base_data_dir,
+    #     'other_feedback_10_temp_cos_lc_1.2')
+    # noisy_results_lc_1_5, noiseless_results_lc_1_5 = load_results(base_data_dir, 'other_feedback_10_temp_cos_lc_1.5')
+    # noisy_results_lc_0_8, noiseless_results_lc_0_8 = load_results(base_data_dir, 'other_feedback_10_temp_cos_lc_0.8')
+
+    all_noisy_results = [noisy_results_baseline, noisy_results_other_feedback, noisy_results_other_feedback_10_temp_cos]
+    all_noiseless_results = [noiseless_results_baseline, noiseless_results_other_feedback, noiseless_results_other_feedback_10_temp_cos]
+    labels = ["Baseline", "Other Feedback, Constant Temp", "Other Feedback, Temp Cosine, alpha=1.0"]
+    # all_noisy_results = [noisy_results_other_feedback_10_temp_cos, noisy_results_other_feedback_10_temp_cos_lc,
+    #                      noisy_results_lc_1_5, noisy_results_lc_0_8]
+    # all_noiseless_results = [noiseless_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos_lc,
+    #                          noiseless_results_lc_1_5, noiseless_results_lc_0_8]
+    # labels = ["Other Feedback, Temp Cosine, alpha=1.0", "Other Feedback, Temp Cosine, alpha=1.2", "Other Feedback, Temp Cosine, alpha=1.5", "Other Feedback, Temp Cosine, alpha=0.8"]
+
+    def plot_curve_and_std(ax, mean, std, label):
+        ax.plot(mean, label=label)
+        ax.fill_between(np.arange(0, len(mean), 1),
+                        mean - 0.5 * std,
+                        mean + 0.5 * std,
+                        alpha=0.2)
 
     # Plot cross-entropies
     fig, ax = plt.subplots(1, 2, figsize=(15, 5))
-    ax[1].plot(np.mean(noisy_results_baseline['all_eval_cross_entropies'], axis=0), label='Baseline')
-    ax[1].fill_between(np.arange(0, len(noisy_results_baseline['all_eval_cross_entropies'][0]), 1),
-                       np.mean(noisy_results_baseline['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-                           noisy_results_baseline['all_eval_cross_entropies'], axis=0),
-                       np.mean(noisy_results_baseline['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-                           noisy_results_baseline['all_eval_cross_entropies'], axis=0),
-                       alpha=0.2)
-    ax[1].plot(np.mean(noisy_results_other_feedback['all_eval_cross_entropies'], axis=0),
-               label='Other Feedback, Constant Temp')
-    ax[1].fill_between(np.arange(0, len(noisy_results_other_feedback['all_eval_cross_entropies'][0]), 1),
-                       np.mean(noisy_results_other_feedback['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-                           noisy_results_other_feedback['all_eval_cross_entropies'], axis=0),
-                       np.mean(noisy_results_other_feedback['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-                           noisy_results_other_feedback['all_eval_cross_entropies'], axis=0),
-                       alpha=0.2)
-    ax[1].plot(np.mean(noisy_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0),
-               label='Other Feedback, Temp Cosine')
-    ax[1].fill_between(np.arange(0, len(noisy_results_other_feedback_10_temp_cos['all_eval_cross_entropies'][0]), 1),
-                       np.mean(noisy_results_other_feedback_10_temp_cos['all_eval_cross_entropies'],
-                               axis=0) - 0.5 * np.std(
-                           noisy_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0),
-                       np.mean(noisy_results_other_feedback_10_temp_cos['all_eval_cross_entropies'],
-                               axis=0) + 0.5 * np.std(
-                           noisy_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0),
-                       alpha=0.2)
-    ax[1].set_xlabel('Number of Queries')
-    ax[1].set_ylabel('Cross-Entropy')
-    ax[1].legend()
-    ax[1].set_title('Noisy Feedback')
+    for noisy_results, noiseless_results, label in zip(all_noisy_results, all_noiseless_results, labels):
+        plot_curve_and_std(ax[0], np.mean(noiseless_results['all_eval_cross_entropies'], axis=0),
+                           np.std(noiseless_results['all_eval_cross_entropies'], axis=0), label)
+        plot_curve_and_std(ax[1], np.mean(noisy_results['all_eval_cross_entropies'], axis=0),
+                           np.std(noisy_results['all_eval_cross_entropies'], axis=0), label)
 
-    # Do the same for noiseless feedback
-    ax[0].plot(np.mean(noiseless_results_baseline['all_eval_cross_entropies'], axis=0), label='Baseline')
-    ax[0].fill_between(np.arange(0, len(noiseless_results_baseline['all_eval_cross_entropies'][0]), 1),
-                       np.mean(noiseless_results_baseline['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-                           noiseless_results_baseline['all_eval_cross_entropies'], axis=0),
-                       np.mean(noiseless_results_baseline['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-                           noiseless_results_baseline['all_eval_cross_entropies'], axis=0),
-                       alpha=0.2)
-    ax[0].plot(np.mean(noiseless_results_other_feedback['all_eval_cross_entropies'], axis=0),
-               label='Other Feedback, Constant Temp')
-    ax[0].fill_between(np.arange(0, len(noiseless_results_other_feedback['all_eval_cross_entropies'][0]), 1),
-                       np.mean(noiseless_results_other_feedback['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-                           noiseless_results_other_feedback['all_eval_cross_entropies'], axis=0),
-                       np.mean(noiseless_results_other_feedback['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-                           noiseless_results_other_feedback['all_eval_cross_entropies'], axis=0),
-                       alpha=0.2)
-    ax[0].plot(np.mean(noiseless_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0),
-               label='Other Feedback, Temp Cosine')
-    ax[0].fill_between(
-        np.arange(0, len(noiseless_results_other_feedback_10_temp_cos['all_eval_cross_entropies'][0]), 1),
-        np.mean(noiseless_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-            noiseless_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0),
-        np.mean(noiseless_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-            noiseless_results_other_feedback_10_temp_cos['all_eval_cross_entropies'], axis=0),
-        alpha=0.2)
     ax[0].set_xlabel('Number of Queries')
     ax[0].set_ylabel('Cross-Entropy')
     ax[0].legend()
     ax[0].set_title('Noiseless Feedback')
 
+    ax[1].set_xlabel('Number of Queries')
+    ax[1].set_ylabel('Cross-Entropy')
+    ax[1].legend()
+    ax[1].set_title('Noisy Feedback')
+
     # set y-axis limit
-    ax[1].set_ylim([0.51, 0.72])
     ax[0].set_ylim([0.51, 0.72])
+    ax[1].set_ylim([0.51, 0.72])
 
-    plt.savefig(f'pref_learning_comparison.png')
+    plt.savefig(f'pref_learning_comparison_lc.png')
     plt.show()
-
-    # First plot noiseless results
-
-    # # Plot cross-entropies, learned reward norms, and optimal rewards in one figure
-    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-    # ax1.plot(np.mean(total_noisy_results['all_eval_cross_entropies'], axis=0), label='Noisy Feedback')
-    # ax1.fill_between(np.arange(0, len(total_noisy_results['all_eval_cross_entropies'][0]), 1),
-    #                  np.mean(total_noisy_results['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-    #                      total_noisy_results['all_eval_cross_entropies'], axis=0),
-    #                  np.mean(total_noisy_results['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-    #                      total_noisy_results['all_eval_cross_entropies'], axis=0),
-    #                  alpha=0.2)
-    # ax1.plot(np.mean(total_noiseless_results['all_eval_cross_entropies'], axis=0), label='Noiseless Feedback')
-    # ax1.fill_between(np.arange(0, len(total_noiseless_results['all_eval_cross_entropies'][0]), 1),
-    #                  np.mean(total_noiseless_results['all_eval_cross_entropies'], axis=0) - 0.5 * np.std(
-    #                      total_noiseless_results['all_eval_cross_entropies'], axis=0),
-    #                  np.mean(total_noiseless_results['all_eval_cross_entropies'], axis=0) + 0.5 * np.std(
-    #                      total_noiseless_results['all_eval_cross_entropies'], axis=0),
-    #                  alpha=0.2)
-    # ax1.set_xlabel('Number of Queries')
-    # ax1.set_ylabel('Cross-Entropy')
-    # ax1.legend()
-    # ax1.set_title('Baseline')
-    #
-    # ax2.plot([0, len(total_noisy_results['all_optimal_true_rewards'][0]) - 1],
-    #          [np.mean(total_noisy_results['all_optimal_true_rewards']),
-    #           np.mean(total_noisy_results['all_optimal_true_rewards'])],
-    #          'k--', linewidth=2, label='Optimal Trajectory')
-    # ax2.plot(np.mean(total_noisy_results['all_optimal_learned_rewards'], axis=0),
-    #          label='Learned Reward, Noisy Feedback')
-    # ax2.fill_between(np.arange(0, len(total_noisy_results['all_optimal_learned_rewards'][0]), 1),
-    #                  np.mean(total_noisy_results['all_optimal_learned_rewards'], axis=0) - 0.5 * np.std(
-    #                      total_noisy_results['all_optimal_learned_rewards'], axis=0),
-    #                  np.mean(total_noisy_results['all_optimal_learned_rewards'], axis=0) + 0.5 * np.std(
-    #                      total_noisy_results['all_optimal_learned_rewards'], axis=0),
-    #                  alpha=0.2)
-    # ax2.plot(np.mean(total_noiseless_results['all_optimal_learned_rewards'], axis=0),
-    #          label='Learned Reward, Noiseless Feedback')
-    # ax2.fill_between(np.arange(0, len(total_noiseless_results['all_optimal_learned_rewards'][0]), 1),
-    #                  np.mean(total_noiseless_results['all_optimal_learned_rewards'], axis=0) - 0.5 * np.std(
-    #                      total_noiseless_results['all_optimal_learned_rewards'], axis=0),
-    #                  np.mean(total_noiseless_results['all_optimal_learned_rewards'], axis=0) + 0.5 * np.std(
-    #                      total_noiseless_results['all_optimal_learned_rewards'], axis=0),
-    #                  alpha=0.2)
-    #
-    # ax2.set_xlabel('Number of Queries')
-    # ax2.set_ylabel('Reward Value')
-    # ax2.set_title(f'True Reward of Optimal Trajectory')
-    # ax2.legend()
-    #
-    # plt.tight_layout()
-    # plt.savefig(f'pref_learning_other_feedback_10_temp_cos.png')
 
 
 if __name__ == '__main__':
