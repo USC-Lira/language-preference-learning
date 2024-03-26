@@ -203,11 +203,18 @@ def _pref_learning(args, train_dataloader, test_dataloader, model,
             # where n is the number of other language feedback
             if args.use_other_feedback:
                 nlcomp_features_expand = nlcomp_features.unsqueeze(1).expand(-1, other_nlcomp_features.shape[1], -1)
+                # Compute the cosine similarity between the language feedback and the other language feedback
+                cos_sim = F.cosine_similarity(nlcomp_features_expand, other_nlcomp_features, dim=2)
                 if args.use_constant_temp:
-                    loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / args.lang_temp).mean()
+                    loss_lang_pref = -logsigmoid((learned_reward(nlcomp_features_expand) - learned_reward(other_nlcomp_features)) / args.lang_temp)
+                    if args.adaptive_weights:
+                        weights = (1 - cos_sim) / 2
+                        weights = weights / torch.sum(weights, dim=1, keepdim=True)
+                        weights = weights.unsqueeze(2)
+                        loss_lang_pref = torch.sum(weights * loss_lang_pref, dim=1).mean()
+                    else:
+                        loss_lang_pref = loss_lang_pref.mean()
                 else:
-                    # Compute the cosine similarity between the language feedback and the other language feedback
-                    cos_sim = F.cosine_similarity(nlcomp_features_expand, other_nlcomp_features, dim=2)
                     # Transform cosine similarity to temperature
                     # temp_cos_sim = (1 - cos_sim) / 2
                     temp_cos_sim = 1 / (1 + torch.exp(-5 * cos_sim))
@@ -473,6 +480,10 @@ def run(args):
             postfix_noisy += '_temp_cos' + f"_lc_{args.lang_loss_coeff}"
             postfix_noiseless += '_temp_cos' + f"_lc_{args.lang_loss_coeff}"
 
+        if args.adaptive_weights:
+            postfix_noisy += '_adaptive_weights'
+            postfix_noiseless += '_adaptive_weights'
+
     save_results(args, noisy_results, postfix=postfix_noisy)
     save_results(args, noiseless_results, postfix=postfix_noiseless)
 
@@ -485,7 +496,6 @@ if __name__ == "__main__":
     parser.add_argument('--true-reward-dir', type=str, default='true_rewards/0',
                         help='the directory of trajectories and true rewards')
     parser.add_argument('--old-model', action="store_true", help='whether to use old model')
-    parser.add_argument('--num-batches', type=int, default=2, help='')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
     parser.add_argument('--preprocessed-nlcomps', action='store_true', help="")
@@ -496,7 +506,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight-decay', type=float, default=0, help='')
     parser.add_argument('--lr', type=float, default=1e-3, help='')
     parser.add_argument('--seed', type=int, default=0, help='')
-    parser.add_argument('--num-iterations', type=int, default=5, help='')
+    parser.add_argument('--num-iterations', type=int, default=1, help='')
     parser.add_argument('--use-all-datasets', action="store_true", help='whether to use all datasets or just test set')
     parser.add_argument('--use-softmax', action="store_true", help='whether to use softmax or argmax for feedback')
     parser.add_argument('--use-other-feedback', action="store_true", help='whether to use other feedback')
@@ -505,6 +515,7 @@ if __name__ == "__main__":
     parser.add_argument('--use-constant-temp', action="store_true", help='whether to use constant temperature')
     parser.add_argument('--lang-temp', default=1.0, type=float, help='temperature for compare with other language feedback')
     parser.add_argument('--lang-loss-coeff', default=1.0, type=float, help='coefficient for language preference loss')
+    parser.add_argument('--adaptive-weights', action="store_true", help='whether to use adaptive weights')
 
     args = parser.parse_args()
     run(args)
