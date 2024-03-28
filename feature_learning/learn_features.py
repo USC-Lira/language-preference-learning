@@ -59,10 +59,11 @@ def evaluate(model, data_loader, device):
             pred = model(data)
 
             encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
-
-            reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data['traj_a'], dim=-2))
-            reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(data['traj_b'], dim=-2))
-            total_reconstruction_loss += reconstruction_loss.detach().cpu().item()
+            reconstruction_loss = torch.tensor(0.).to(device)
+            if decoded_traj_a is not None and decoded_traj_b is not None:
+                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data['traj_a'], dim=-2))
+                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(data['traj_b'], dim=-2))
+                total_reconstruction_loss += reconstruction_loss.detach().cpu().item()
 
             norm_loss = F.mse_loss(torch.norm(encoded_lang, dim=-1), torch.ones(encoded_lang.shape[0]).to(device))
             total_norm_loss += norm_loss.detach().cpu().item()
@@ -80,7 +81,7 @@ def evaluate(model, data_loader, device):
 
     metrics = {
         'loss': total_loss / len(data_loader),
-        'reconstruction_loss': total_reconstruction_loss / len(data_loader),
+        # 'reconstruction_loss': total_reconstruction_loss / len(data_loader),
         'norm_loss': total_norm_loss / len(data_loader),
         'cosine_similarity': total_cosine_similarity / len(data_loader),
         'log_likelihood': total_log_likelihood / len(data_loader),
@@ -214,8 +215,10 @@ def train(logger, args):
 
                 # compute training reconstruction loss
                 # MSELoss already takes the mean over the batch.
-                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(train_data['traj_a'], dim=-2))
-                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(train_data['traj_b'], dim=-2))
+                reconstruction_loss = torch.tensor(0.).to(device)
+                if decoded_traj_a is not None and decoded_traj_b is not None:
+                    reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(train_data['traj_a'], dim=-2))
+                    reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(train_data['traj_b'], dim=-2))
 
                 # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
                 cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)

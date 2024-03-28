@@ -4,8 +4,10 @@ import torch.nn as nn
 
 from feature_learning.transformer import TransformerEncoder
 from feature_learning.lstm import LSTMEncoder
+from feature_learning.cnn import CNNEncoder
 
 STATE_DIM = 65
+IMG_OBS_DIM = (96, 96, 3)
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
 
 
@@ -31,17 +33,21 @@ class NLTrajAutoencoder(nn.Module):
         # TODO: can later make encoders and decoders transformers
         self.traj_encoder_cls = traj_encoder
         self.use_cls_token = use_cls_token
-        if traj_encoder == 'transformer':
-            self.traj_encoder = TransformerEncoder(
-                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
-                nlayers=2, d_ff=feature_dim, dropout=0.1, use_cnn_in_transformer=use_cnn_in_transformer,
-                use_casual_attention=use_casual_attention, use_cls_token=use_cls_token
-            )
-        elif traj_encoder == 'mlp':
+        if traj_encoder == 'mlp':
             self.traj_encoder = nn.Sequential(
                 nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
                 nn.ReLU(),
                 nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
+            )
+        elif traj_encoder == 'cnn':
+            self.traj_encoder = CNNEncoder(
+                in_channels=3, action_dim=ACTION_DIM, hidden_dim=encoder_hidden_dim, output_dim=feature_dim
+            )
+        elif traj_encoder == 'transformer':
+            self.traj_encoder = TransformerEncoder(
+                input_size=STATE_DIM + ACTION_DIM, d_model=encoder_hidden_dim, nhead=4, d_hid=encoder_hidden_dim,
+                nlayers=2, d_ff=feature_dim, dropout=0.1, use_cnn_in_transformer=use_cnn_in_transformer,
+                use_casual_attention=use_casual_attention, use_cls_token=use_cls_token
             )
         elif traj_encoder == 'lstm':
             self.traj_encoder = LSTMEncoder(
@@ -77,8 +83,14 @@ class NLTrajAutoencoder(nn.Module):
         traj_b = inputs['traj_b']
 
         # Encode trajectories
-        encoded_traj_a = self.traj_encoder(traj_a)
-        encoded_traj_b = self.traj_encoder(traj_b)
+        if self.traj_encoder_cls == 'cnn':
+            actions_a = inputs['actions_a']
+            actions_b = inputs['actions_b']
+            encoded_traj_a = self.traj_encoder(traj_a, actions_a)
+            encoded_traj_b = self.traj_encoder(traj_b, actions_b)
+        else:
+            encoded_traj_a = self.traj_encoder(traj_a)
+            encoded_traj_b = self.traj_encoder(traj_b)
 
         if self.traj_encoder_cls == 'transformer':
             if self.use_cls_token:
@@ -98,10 +110,6 @@ class NLTrajAutoencoder(nn.Module):
         else:
             raise ValueError(f"Trajectory encoder {self.traj_encoder} not found")
 
-        # Reshape back to (batch_size, trajectory length, state+action)
-        decoded_traj_a = self.traj_decoder(encoded_traj_a)
-        decoded_traj_b = self.traj_decoder(encoded_traj_b)
-
         # Encode the language
         if self.use_bert_encoder:
             lang_tokens = inputs['nlcomp_tokens']
@@ -114,8 +122,11 @@ class NLTrajAutoencoder(nn.Module):
             encoded_lang = self.lang_encoder(lang_embeds)
 
         # NOTE: traj_a is the reference, traj_b is the updated
-        decoded_traj_a = self.traj_decoder(encoded_traj_a)
-        decoded_traj_b = self.traj_decoder(encoded_traj_b)
+        if not self.traj_encoder_cls == 'cnn':
+            decoded_traj_a = self.traj_decoder(encoded_traj_a)
+            decoded_traj_b = self.traj_decoder(encoded_traj_b)
+        else:
+            decoded_traj_a, decoded_traj_b = None, None
 
         output = (encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b)
         return output
