@@ -42,6 +42,12 @@ def load_data(args, split='train'):
         'nlcomp_index': nlcomp_index_file
     }
 
+    if args.use_img_obs:
+        traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs.npy".format(split))
+        action_file = os.path.join(args.data_dir, "{}/actions.npy".format(split))
+        return_files_dict['traj_img_obs'] = traj_img_obs_file
+        return_files_dict['actions'] = action_file
+
     return return_files_dict
 
 
@@ -59,6 +65,7 @@ def evaluate(model, data_loader, device):
             pred = model(data)
 
             encoded_traj_a, encoded_traj_b, encoded_lang, decoded_traj_a, decoded_traj_b = pred
+
             reconstruction_loss = torch.tensor(0.).to(device)
             if decoded_traj_a is not None and decoded_traj_b is not None:
                 reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data['traj_a'], dim=-2))
@@ -150,23 +157,36 @@ def train(logger, args):
     val_files_dict = load_data(args, split='val')
     test_files_dict = load_data(args, split='test')
 
+    train_img_obs_file = train_files_dict.get('traj_img_obs', None)
+    val_img_obs_file = val_files_dict.get('traj_img_obs', None)
+    test_img_obs_file = test_files_dict.get('traj_img_obs', None)
+    train_action_file = train_files_dict.get('actions', None)
+    val_action_file = val_files_dict.get('actions', None)
+    test_action_file = test_files_dict.get('actions', None)
+
     train_dataset = NLTrajComparisonDataset(train_files_dict['nlcomp_index'], train_files_dict['traj_a_index'],
-                                            train_files_dict['traj_b_index'],
+                                            train_files_dict['traj_b_index'], seq_len=200,
                                             tokenizer=tokenizer, preprocessed_nlcomps=args.preprocessed_nlcomps,
                                             unique_nlcomp_file=train_files_dict['unique_nlcomp'],
-                                            traj_file=train_files_dict['trajs'])
+                                            traj_file=train_files_dict['trajs'],
+                                            use_img_obs=args.use_img_obs, img_obs_file=train_img_obs_file,
+                                            action_file=train_action_file)
 
     val_dataset = NLTrajComparisonDataset(val_files_dict['nlcomp_index'], val_files_dict['traj_a_index'],
-                                          val_files_dict['traj_b_index'],
+                                          val_files_dict['traj_b_index'], seq_len=200,
                                           tokenizer=tokenizer, preprocessed_nlcomps=args.preprocessed_nlcomps,
                                           unique_nlcomp_file=val_files_dict['unique_nlcomp'],
-                                          traj_file=val_files_dict['trajs'])
+                                          traj_file=val_files_dict['trajs'],
+                                          use_img_obs=args.use_img_obs, img_obs_file=val_img_obs_file,
+                                          action_file=val_action_file)
 
     test_dataset = NLTrajComparisonDataset(test_files_dict['nlcomp_index'], test_files_dict['traj_a_index'],
-                                           test_files_dict['traj_b_index'],
+                                           test_files_dict['traj_b_index'], seq_len=200,
                                            tokenizer=tokenizer, preprocessed_nlcomps=args.preprocessed_nlcomps,
                                            unique_nlcomp_file=test_files_dict['unique_nlcomp'],
-                                           traj_file=test_files_dict['trajs'])
+                                           traj_file=test_files_dict['trajs'],
+                                           use_img_obs=args.use_img_obs, img_obs_file=test_img_obs_file,
+                                           action_file=test_action_file)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True
@@ -337,7 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-dir', type=str, default='feature_learning/', help='where to save the model')
     parser.add_argument('--bert-model', type=str, default='bert-base', help='which BERT model to use')
     parser.add_argument('--use-bert-encoder', action="store_true", help='whether to use BERT in the language encoder')
-    parser.add_argument('--traj-encoder', default='mlp', choices=['mlp', 'transformer', 'lstm'],
+    parser.add_argument('--traj-encoder', default='mlp', choices=['mlp', 'transformer', 'lstm', 'cnn'],
                         help='which trajectory encoder to use')
     parser.add_argument('--n-heads', type=int, default=4, help='number of heads in the multi-head attention')
     parser.add_argument('--n-layers', type=int, default=3, help='number of layers in the trajectory transformer')
@@ -347,6 +367,7 @@ if __name__ == '__main__':
     parser.add_argument('--set-different-lr', action="store_true",
                         help='whether to set different learning rates for different layers')
     parser.add_argument('--add-norm-loss', action="store_true", help='whether to add norm loss to the total loss')
+    parser.add_argument('--use-img-obs', action="store_true", help='whether to use image observations')
 
     args = parser.parse_args()
 

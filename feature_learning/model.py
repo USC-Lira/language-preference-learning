@@ -7,7 +7,6 @@ from feature_learning.lstm import LSTMEncoder
 from feature_learning.cnn import CNNEncoder
 
 STATE_DIM = 65
-IMG_OBS_DIM = (96, 96, 3)
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
 
 
@@ -79,8 +78,12 @@ class NLTrajAutoencoder(nn.Module):
     # traj_a has shape (n_trajs, n_timesteps, state+action)
     def forward(self, inputs):
         # NOTE: traj_a is the reference, traj_b is the updated
-        traj_a = inputs['traj_a']
-        traj_b = inputs['traj_b']
+        if self.traj_encoder_cls == 'cnn':
+            traj_a, actions_a = inputs['traj_a_img_obs'], inputs['actions_a']
+            traj_b, actions_b = inputs['traj_b_img_obs'], inputs['actions_b']
+        else:
+            traj_a = inputs['traj_a']
+            traj_b = inputs['traj_b']
 
         # Encode trajectories
         if self.traj_encoder_cls == 'cnn':
@@ -103,7 +106,7 @@ class NLTrajAutoencoder(nn.Module):
         elif self.traj_encoder_cls == 'lstm':
             encoded_traj_a = encoded_traj_a
             encoded_traj_b = encoded_traj_b
-        elif self.traj_encoder_cls == 'mlp':
+        elif self.traj_encoder_cls == 'mlp' or self.traj_encoder_cls == 'cnn':
             # Take the mean over timesteps
             encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
             encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
