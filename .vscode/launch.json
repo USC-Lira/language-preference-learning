@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Feature Learning",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/lang_pref_learning/feature_learning/learn_features.py",
+            "console": "integratedTerminal",
+            "env": { "PYTHONPATH": "${workspaceRoot}"},
+            "args": [
+                "--initial-loss-check",
+                "--data-dir=/scr/zyang966/language-preference-learning/data/data_img_obs_2",
+                "--exp-name=finetune-bert-tiny-img-obs",
+                "--bert-model=bert-tiny",
+                "--use-bert-encoder",
+                "--batch-size=64", 
+                "--epochs=1",
+                "--add-norm-loss",
+                "--use-img-obs",
+                "--traj-encoder=cnn"
+            ]
+        }
+    ]
+}

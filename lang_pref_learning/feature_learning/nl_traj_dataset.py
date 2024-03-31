@@ -22,6 +22,7 @@ class NLTrajComparisonDataset(Dataset):
         use_img_obs=False,
         img_obs_file=None,
         action_file=None,
+        device="cpu",
     ):
 
         assert unique_nlcomp_file is not None
@@ -83,6 +84,15 @@ class NLTrajComparisonDataset(Dataset):
                 self.unique_nlcomps_attention_masks
             )
 
+        # transform to torch tensors and move to device
+        self.trajs = torch.tensor(self.trajs, dtype=torch.float32).to(device)
+        self.unique_nlcomps_tokens = torch.tensor(self.unique_nlcomps_tokens, dtype=torch.long).to(device)
+        self.unique_nlcomps_attention_masks = torch.tensor(self.unique_nlcomps_attention_masks, dtype=torch.long).to(device)
+
+        if self.use_img_obs:
+            self.img_observations = torch.tensor(self.img_observations, dtype=torch.float32).to(device)
+            self.actions = torch.tensor(self.actions, dtype=torch.float32).to(device)
+
     def __len__(self):
         return len(self.nlcomps)
 
@@ -91,32 +101,20 @@ class NLTrajComparisonDataset(Dataset):
         traj_b = self.trajs[self.traj_bs[idx], :, :]
 
         data = {
-            "traj_a": torch.tensor(traj_a, dtype=torch.float32),
-            "traj_b": torch.tensor(traj_b, dtype=torch.float32),
+            "traj_a": traj_a,
+            "traj_b": traj_b,
         }
 
         if self.use_img_obs:
-            data["traj_a_img_obs"] = torch.tensor(
-                self.img_observations[self.traj_as[idx]], dtype=torch.float32
-            )
-            data["traj_b_img_obs"] = torch.tensor(
-                self.img_observations[self.traj_bs[idx]], dtype=torch.float32
-            )
-            data["actions_a"] = torch.tensor(
-                self.actions[self.traj_as[idx]], dtype=torch.float32
-            )
-            data["actions_b"] = torch.tensor(
-                self.actions[self.traj_bs[idx]], dtype=torch.float32
-            )
+            data["traj_a_img_obs"] = self.img_observations[self.traj_as[idx]]
+            data["traj_b_img_obs"] = self.img_observations[self.traj_bs[idx]]
+            data["actions_a"] = self.actions[self.traj_as[idx]]
+            data["actions_b"] = self.actions[self.traj_bs[idx]]
 
         if self.preprocessed_nlcomps:
             data["nlcomp"] = torch.tensor(self.unique_nlcomps[self.nlcomps[idx]])
         else:
-            data["nlcomp_tokens"] = torch.tensor(
-                self.unique_nlcomps_tokens[self.nlcomps[idx]], dtype=torch.long
-            )
-            data["attention_mask"] = torch.tensor(
-                self.unique_nlcomps_attention_masks[self.nlcomps[idx]], dtype=torch.long
-            )
+            data["nlcomp_tokens"] = self.unique_nlcomps_tokens[self.nlcomps[idx]]
+            data["attention_mask"] = self.unique_nlcomps_attention_masks[self.nlcomps[idx]]
 
         return data

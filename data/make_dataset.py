@@ -168,15 +168,15 @@ if __name__ == '__main__':
 
     np.random.seed(seed)
 
-    data_dir = '/scr/zyang966/data_img_obs'
+    data_dir = '/scr/zyang966/dataset_img_obs_2'
     train_trajectories = np.load(os.path.join(data_dir, 'train/trajs.npy'))
     val_trajectories = np.load(os.path.join(data_dir, 'val/trajs.npy'))
 
     total_num_trajs = len(train_trajectories) + len(val_trajectories)
 
     if use_img_obs:
-        train_traj_img_obs = np.load(os.path.join(data_dir, 'train/traj_img_obs.npy'))
-        val_traj_img_obs = np.load(os.path.join(data_dir, 'val/traj_img_obs.npy'))
+        train_traj_img_obs = np.load(os.path.join(data_dir, 'train/traj_img_observations.npy'))
+        val_traj_img_obs = np.load(os.path.join(data_dir, 'val/traj_img_observations.npy'))
         train_actions = np.load(os.path.join(data_dir, 'train/actions.npy'))
         val_actions = np.load(os.path.join(data_dir, 'val/actions.npy'))
 

@@ -1,0 +1,10 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --time=30:00:00
+
+source /scr/zyang966/miniconda3/etc/profile.d/conda.sh
+conda activate lang
+bash scripts/finetune_bert_img.sh

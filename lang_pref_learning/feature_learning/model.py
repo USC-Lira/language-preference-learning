@@ -2,9 +2,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from feature_learning.transformer import TransformerEncoder
-from feature_learning.lstm import LSTMEncoder
-from feature_learning.cnn import CNNEncoder
+from lang_pref_learning.feature_learning.transformer import TransformerEncoder
+from lang_pref_learning.feature_learning.lstm import LSTMEncoder
+from lang_pref_learning.feature_learning.cnn import CNNEncoder
 
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller

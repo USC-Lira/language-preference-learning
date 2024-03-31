@@ -4,7 +4,8 @@ from transformers import AutoModel, AutoTokenizer
 import torch
 import argparse
 import os
-from feature_learning.utils import BERT_MODEL_NAME
+
+from lang_pref_learning.feature_learning.utils import BERT_MODEL_NAME
 
 os.environ["OMP_NUM_THREADS"] = "4"
 

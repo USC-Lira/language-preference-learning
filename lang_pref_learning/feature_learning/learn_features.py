@@ -7,10 +7,12 @@ import torch.optim as optim
 import numpy as np
 from transformers import AutoModel, AutoTokenizer
 from tqdm import tqdm
+import time
 
-from feature_learning.nl_traj_dataset import NLTrajComparisonDataset
-from feature_learning.model import NLTrajAutoencoder
-from feature_learning.utils import (
+
+from lang_pref_learning.feature_learning.nl_traj_dataset import NLTrajComparisonDataset
+from lang_pref_learning.feature_learning.model import NLTrajAutoencoder
+from lang_pref_learning.feature_learning.utils import (
     timeStamped,
     BERT_MODEL_NAME,
     BERT_OUTPUT_DIM,
@@ -65,9 +67,16 @@ def evaluate(model, data_loader, device):
     total_log_likelihood = 0
     total_num_correct = 0
     logsigmoid = nn.LogSigmoid()
-    for data in data_loader:
+    curr_t = time.time()
+    for data in tqdm(data_loader):
         with torch.no_grad():
+            data_time = time.time() - curr_t
+            curr_t = time.time()
             data = {key: value.to(device) for key, value in data.items()}
+
+            # get data load time
+            data_gpu_time = time.time() - curr_t
+            curr_t = time.time()
 
             pred = model(data)
             (
@@ -100,6 +109,12 @@ def evaluate(model, data_loader, device):
 
             total_loss += (reconstruction_loss + log_likelihood_loss).detach().cpu().item()
             total_num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
+
+            # get evaluation time
+            eval_time = time.time() - curr_t
+            curr_t = time.time()
+
+            # print('Data Load time: ', data_time, "Data GPU time", data_gpu_time, 'Eval time: ', eval_time)
 
     metrics = {
         "loss": total_loss / len(data_loader),
@@ -187,7 +202,7 @@ def train(logger, args):
         train_files_dict["nlcomp_index"],
         train_files_dict["traj_a_index"],
         train_files_dict["traj_b_index"],
-        seq_len=200,
+        seq_len=160,
         tokenizer=tokenizer,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=train_files_dict["unique_nlcomp"],
@@ -195,13 +210,14 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=train_img_obs_file,
         action_file=train_action_file,
+        device=device,
     )
 
     val_dataset = NLTrajComparisonDataset(
         val_files_dict["nlcomp_index"],
         val_files_dict["traj_a_index"],
         val_files_dict["traj_b_index"],
-        seq_len=200,
+        seq_len=160,
         tokenizer=tokenizer,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=val_files_dict["unique_nlcomp"],
@@ -209,6 +225,7 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=val_img_obs_file,
         action_file=val_action_file,
+        device=device,
     )
 
     test_dataset = NLTrajComparisonDataset(
@@ -223,28 +240,29 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=test_img_obs_file,
         action_file=test_action_file,
+        device=device,
     )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=4,
-        pin_memory=True,
+        num_workers=0,
+        pin_memory=False,
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
-        pin_memory=True,
+        num_workers=0,
+        pin_memory=False,
     )
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
-        pin_memory=True,
+        num_workers=0,
+        pin_memory=False,
     )
 
     if args.initial_loss_check:
@@ -272,7 +290,7 @@ def train(logger, args):
             pbar.set_description(f"Epoch {epoch + 1}/{args.epochs}")
             for train_data in train_loader:
                 # load it to the active device
-                train_data = {key: value.to(device) for key, value in train_data.items()}
+                # train_data = {key: value.to(device) for key, value in train_data.items()}
 
                 # reset the gradients back to zero
                 optimizer.zero_grad()
