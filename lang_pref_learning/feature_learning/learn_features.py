@@ -51,7 +51,10 @@ def load_data(args, split="train"):
     }
 
     if args.use_img_obs:
-        traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs.npy".format(split))
+        if args.use_stack_img_obs:
+            traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs_stack.npy".format(split))
+        else:
+            traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs.npy".format(split))
         action_file = os.path.join(args.data_dir, "{}/actions.npy".format(split))
         return_files_dict["traj_img_obs"] = traj_img_obs_file
         return_files_dict["actions"] = action_file
@@ -118,7 +121,7 @@ def evaluate(model, data_loader, device):
 
     metrics = {
         "loss": total_loss / len(data_loader),
-        # 'reconstruction_loss': total_reconstruction_loss / len(data_loader),
+        'reconstruction_loss': total_reconstruction_loss / len(data_loader),
         "norm_loss": total_norm_loss / len(data_loader),
         "cosine_similarity": total_cosine_similarity / len(data_loader),
         "log_likelihood": total_log_likelihood / len(data_loader),
@@ -158,6 +161,7 @@ def train(logger, args):
         traj_encoder=args.traj_encoder,
         use_cnn_in_transformer=args.use_cnn_in_transformer,
         use_casual_attention=args.use_casual_attention,
+        use_stack_img_obs=args.use_stack_img_obs,
     )
 
     if args.use_bert_encoder:
@@ -202,7 +206,7 @@ def train(logger, args):
         train_files_dict["nlcomp_index"],
         train_files_dict["traj_a_index"],
         train_files_dict["traj_b_index"],
-        seq_len=160,
+        seq_len=args.seq_len,
         tokenizer=tokenizer,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=train_files_dict["unique_nlcomp"],
@@ -217,7 +221,7 @@ def train(logger, args):
         val_files_dict["nlcomp_index"],
         val_files_dict["traj_a_index"],
         val_files_dict["traj_b_index"],
-        seq_len=160,
+        seq_len=args.seq_len,
         tokenizer=tokenizer,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=val_files_dict["unique_nlcomp"],
@@ -232,7 +236,7 @@ def train(logger, args):
         test_files_dict["nlcomp_index"],
         test_files_dict["traj_a_index"],
         test_files_dict["traj_b_index"],
-        seq_len=200,
+        seq_len=args.seq_len,
         tokenizer=tokenizer,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=test_files_dict["unique_nlcomp"],
@@ -520,6 +524,12 @@ if __name__ == "__main__":
         help="whether to add norm loss to the total loss",
     )
     parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
+    parser.add_argument(
+        "--use-stack-img-obs",
+        action="store_true",
+        help="whether to use stacked image observations",
+    )
+    parser.add_argument('--seq-len', type=int, default=200, help='sequence length for the trajectory')
 
     args = parser.parse_args()
 

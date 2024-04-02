@@ -43,6 +43,7 @@ class NLTrajAutoencoder(nn.Module):
         use_cnn_in_transformer=False,
         use_casual_attention=False,
         use_cls_token=False,
+        use_stack_img_obs=False,
     ):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
@@ -56,7 +57,7 @@ class NLTrajAutoencoder(nn.Module):
             )
         elif traj_encoder == "cnn":
             self.traj_encoder = CNNEncoder(
-                in_channels=3,
+                in_channels=3 if not use_stack_img_obs else 9,
                 action_dim=ACTION_DIM,
                 hidden_dim=encoder_hidden_dim,
                 output_dim=feature_dim,

@@ -42,7 +42,7 @@ class NLTrajComparisonDataset(Dataset):
 
             # image observations are stored as (n_trajectories, n_timesteps, 96, 96, 3)
             # change the shape of the img_observations to (n_trajectories, n_timesteps, 3, 96, 96)
-            if self.img_observations.shape[-1] == 3:
+            if self.img_observations.shape[-1] in [3, 9]:
                 self.img_observations = self.img_observations.transpose(0, 1, 4, 2, 3)
 
         self.max_len = seq_len
