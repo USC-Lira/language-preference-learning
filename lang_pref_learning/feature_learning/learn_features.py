@@ -11,7 +11,7 @@ import time
 
 
 from lang_pref_learning.feature_learning.nl_traj_dataset import NLTrajComparisonDataset
-from lang_pref_learning.feature_learning.model import NLTrajAutoencoder
+from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.feature_learning.utils import (
     timeStamped,
     BERT_MODEL_NAME,
@@ -52,7 +52,10 @@ def load_data(args, split="train"):
 
     if args.use_img_obs:
         if args.use_stack_img_obs:
-            traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs_stack.npy".format(split))
+            if args.use_visual_features:
+                traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_features_stack.npy".format(split))
+            else:
+                traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs_stack.npy".format(split))
         else:
             traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs.npy".format(split))
         action_file = os.path.join(args.data_dir, "{}/actions.npy".format(split))
@@ -162,6 +165,9 @@ def train(logger, args):
         use_cnn_in_transformer=args.use_cnn_in_transformer,
         use_casual_attention=args.use_casual_attention,
         use_stack_img_obs=args.use_stack_img_obs,
+        n_frames=args.n_frames,
+        use_visual_features=args.use_visual_features,
+        visual_feature_dim=args.visual_feature_dim * args.n_frames if args.use_stack_img_obs else args.visual_feature_dim,
     )
 
     if args.use_bert_encoder:
@@ -214,6 +220,7 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=train_img_obs_file,
         action_file=train_action_file,
+        use_visual_features=args.use_visual_features,
         device=device,
     )
 
@@ -523,13 +530,17 @@ if __name__ == "__main__":
         action="store_true",
         help="whether to add norm loss to the total loss",
     )
+
+    parser.add_argument('--seq-len', type=int, default=200, help='sequence length for the trajectory')
     parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
     parser.add_argument(
         "--use-stack-img-obs",
         action="store_true",
         help="whether to use stacked image observations",
     )
-    parser.add_argument('--seq-len', type=int, default=200, help='sequence length for the trajectory')
+    parser.add_argument("--n-frames", type=int, default=3, help="number of frames to stack")
+    parser.add_argument("--use-visual-features", action="store_true", help="whether to use visual features")
+    parser.add_argument("--visual-feature-dim", type=int, default=256, help="dimension of visual features")
 
     args = parser.parse_args()
 

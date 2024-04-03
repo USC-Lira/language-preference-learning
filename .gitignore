@@ -2,3 +2,4 @@
 data/*/
 exp/
 *.out
+*.pyc

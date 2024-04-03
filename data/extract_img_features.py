@@ -6,7 +6,7 @@ from torchvision.models import EfficientNet_B3_Weights, efficientnet_b3
 
 from einops import rearrange
 
-dataset_dir = dataset_dir = f'{os.getcwd()}/data/dataset_img_obs_res_224'
+dataset_dir = dataset_dir = f'{os.getcwd()}/data/data_img_obs_res_224'
 
 train_img_obs = np.load(f'{dataset_dir}/train/traj_img_obs.npy')
 val_img_obs = np.load(f'{dataset_dir}/val/traj_img_obs.npy')

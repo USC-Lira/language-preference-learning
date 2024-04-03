@@ -2,9 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from lang_pref_learning.feature_learning.transformer import TransformerEncoder
-from lang_pref_learning.feature_learning.lstm import LSTMEncoder
-from lang_pref_learning.feature_learning.cnn import CNNEncoder
+from lang_pref_learning.model.transformer import TransformerEncoder
+from lang_pref_learning.model.lstm import LSTMEncoder
+from lang_pref_learning.model.cnn import CNNEncoder
+from lang_pref_learning.model.visual_mlp import VisualMLP
 
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
@@ -44,6 +45,9 @@ class NLTrajAutoencoder(nn.Module):
         use_casual_attention=False,
         use_cls_token=False,
         use_stack_img_obs=False,
+        n_frames=3,
+        use_visual_features=False,
+        visual_feature_dim=256,
     ):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
@@ -56,12 +60,20 @@ class NLTrajAutoencoder(nn.Module):
                 nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
             )
         elif traj_encoder == "cnn":
-            self.traj_encoder = CNNEncoder(
-                in_channels=3 if not use_stack_img_obs else 9,
-                action_dim=ACTION_DIM,
-                hidden_dim=encoder_hidden_dim,
-                output_dim=feature_dim,
-            )
+            if use_visual_features:
+                self.traj_encoder = VisualMLP(
+                    in_feature_dim=visual_feature_dim,
+                    action_dim=ACTION_DIM,
+                    hidden_dim=encoder_hidden_dim,
+                    out_dim=feature_dim,
+                )
+            else:
+                self.traj_encoder = CNNEncoder(
+                    in_channels=3 if not use_stack_img_obs else 3 * n_frames,
+                    action_dim=ACTION_DIM,
+                    hidden_dim=encoder_hidden_dim,
+                    output_dim=feature_dim,
+                )
         elif traj_encoder == "transformer":
             self.traj_encoder = TransformerEncoder(
                 input_size=STATE_DIM + ACTION_DIM,

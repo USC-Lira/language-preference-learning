@@ -8,13 +8,13 @@ class CNNEncoder(nn.Module):
         self.convnet = nn.Sequential(
             nn.Conv2d(in_channels, 32, 3, stride=2),
             nn.ReLU(),
-            nn.Conv2d(32, 32, 3, stride=2),
-            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
             nn.Conv2d(32, 32, 3, stride=1),
             nn.ReLU(),
+            nn.MaxPool2d(2, 2),
         )
 
-        self.repr_dim = 32 * 21 * 21 + action_dim
+        self.repr_dim = 32 * 10 * 10 + action_dim
 
         self.fc = nn.Sequential(
             nn.Linear(self.repr_dim, hidden_dim),
@@ -41,3 +41,12 @@ class CNNEncoder(nn.Module):
             # Reshape back to (batch_size, timesteps, output_dim)
             x = x.view(original_imgs_shape[0], -1, x.shape[-1])
         return x
+
+
+if __name__ == "__main__":
+    # Test the CNN encoder
+    encoder = CNNEncoder(in_channels=3, action_dim=4, hidden_dim=256, output_dim=128)
+    imgs = torch.randn(32, 10, 3, 96, 96)
+    actions = torch.randn(32, 10, 4)
+    output = encoder(imgs, actions)
+    print(output.shape)

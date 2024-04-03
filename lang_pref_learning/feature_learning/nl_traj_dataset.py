@@ -3,6 +3,8 @@ from torch.utils.data import Dataset
 import json
 import numpy as np
 
+from einops import rearrange
+
 
 # nlcomp_file is a json file with the list of comparisons in NL.
 # traj_a_file is a .npy or .npz file with the first trajectory and has a shape of (n_trajectories, n_timesteps, STATE_DIM+ACTION_DIM)
@@ -22,6 +24,7 @@ class NLTrajComparisonDataset(Dataset):
         use_img_obs=False,
         img_obs_file=None,
         action_file=None,
+        use_visual_features=False,
         device="cpu",
     ):
 
@@ -34,16 +37,16 @@ class NLTrajComparisonDataset(Dataset):
         self.traj_as = np.load(traj_a_file)
         self.traj_bs = np.load(traj_b_file)
         if use_img_obs:
+            import ipdb; ipdb.set_trace()
             self.img_observations = np.load(img_obs_file)
             self.actions = np.load(action_file)
 
-            self.img_observations = self.img_observations[:, :seq_len, :, :, :]
-            self.actions = self.actions[:, :seq_len, :]
+            self.img_observations = self.img_observations[:, :seq_len]
+            self.actions = self.actions[:, :seq_len]
 
-            # image observations are stored as (n_trajectories, n_timesteps, 96, 96, 3)
-            # change the shape of the img_observations to (n_trajectories, n_timesteps, 3, 96, 96)
-            if self.img_observations.shape[-1] in [3, 9]:
-                self.img_observations = self.img_observations.transpose(0, 1, 4, 2, 3)
+            if not use_visual_features:
+                if self.img_observations.shape[-1] in [3, 6, 9]:
+                    self.img_observations = rearrange(self.img_observations, "b t h w c -> b t c h w")
 
         self.max_len = seq_len
         self.preprocessed_nlcomps = preprocessed_nlcomps
