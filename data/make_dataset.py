@@ -144,6 +144,7 @@ def generate_and_save_dataset(trajs, output_dir, noise_augmentation=0, id_mappin
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
 
+    parser.add_argument('--data-dir', type=str, default='', help='')
     parser.add_argument('--output-dir', type=str, default='', help='')
     parser.add_argument('--dataset-size', type=int, default=1000, help='')
     parser.add_argument('--noise-augmentation', type=int, default=0, help='')
@@ -168,7 +169,7 @@ if __name__ == '__main__':
 
     np.random.seed(seed)
 
-    data_dir = '/scr/zyang966/dataset_img_obs_2'
+    data_dir = args.data_dir
     train_trajectories = np.load(os.path.join(data_dir, 'train/trajs.npy'))
     val_trajectories = np.load(os.path.join(data_dir, 'val/trajs.npy'))
 
