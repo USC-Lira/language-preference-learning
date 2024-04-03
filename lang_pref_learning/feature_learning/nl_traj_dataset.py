@@ -37,12 +37,14 @@ class NLTrajComparisonDataset(Dataset):
         self.traj_as = np.load(traj_a_file)
         self.traj_bs = np.load(traj_b_file)
         if use_img_obs:
-            import ipdb; ipdb.set_trace()
             self.img_observations = np.load(img_obs_file)
             self.actions = np.load(action_file)
 
             self.img_observations = self.img_observations[:, :seq_len]
             self.actions = self.actions[:, :seq_len]
+
+            assert self.img_observations.shape[1] == seq_len
+            assert self.actions.shape[1] == seq_len
 
             if not use_visual_features:
                 if self.img_observations.shape[-1] in [3, 6, 9]:
