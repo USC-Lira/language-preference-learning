@@ -4,4 +4,4 @@ python -m lang_pref_learning.feature_learning.learn_features \
 --exp-name=img-obs-seq-200-stack-small-net \
 --bert-model=bert-tiny --use-bert-encoder \
 --batch-size=48 --add-norm-loss --epochs=1 \
---use-img-obs --traj-encoder=cnn --use-stack-img-obs
+--use-img-obs --traj-encoder=cnn --use-stack-img-obs --n-frames=2 --seq-len=200

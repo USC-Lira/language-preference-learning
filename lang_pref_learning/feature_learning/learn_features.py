@@ -221,6 +221,8 @@ def train(logger, args):
         img_obs_file=train_img_obs_file,
         action_file=train_action_file,
         use_visual_features=args.use_visual_features,
+        resample=args.resample,
+        resample_factor=args.resample_factor,
         device=device,
     )
 
@@ -236,6 +238,8 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=val_img_obs_file,
         action_file=val_action_file,
+        resample=args.resample,
+        resample_factor=args.resample_factor,
         device=device,
     )
 
@@ -251,6 +255,8 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=test_img_obs_file,
         action_file=test_action_file,
+        resample=args.resample,
+        resample_factor=args.resample_factor,
         device=device,
     )
 
@@ -531,7 +537,7 @@ if __name__ == "__main__":
         help="whether to add norm loss to the total loss",
     )
 
-    parser.add_argument('--seq-len', type=int, default=200, help='sequence length for the trajectory')
+    parser.add_argument('--seq-len', type=int, default=500, help='sequence length for the trajectory')
     parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
     parser.add_argument(
         "--use-stack-img-obs",
@@ -541,6 +547,8 @@ if __name__ == "__main__":
     parser.add_argument("--n-frames", type=int, default=3, help="number of frames to stack")
     parser.add_argument("--use-visual-features", action="store_true", help="whether to use visual features")
     parser.add_argument("--visual-feature-dim", type=int, default=256, help="dimension of visual features")
+    parser.add_argument("--resample", action="store_true", help="whether to resample the image observations")
+    parser.add_argument("--resample-factor", type=float, default=0.1, help="resample factor")
 
     args = parser.parse_args()
 

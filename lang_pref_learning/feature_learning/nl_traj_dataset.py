@@ -25,6 +25,8 @@ class NLTrajComparisonDataset(Dataset):
         img_obs_file=None,
         action_file=None,
         use_visual_features=False,
+        resample=False,
+        resample_factor=1.0,
         device="cpu",
     ):
 
@@ -43,8 +45,13 @@ class NLTrajComparisonDataset(Dataset):
             self.img_observations = self.img_observations[:, :seq_len]
             self.actions = self.actions[:, :seq_len]
 
-            assert self.img_observations.shape[1] == seq_len
-            assert self.actions.shape[1] == seq_len
+            if resample:
+                resample_frames = int(1 / resample_factor)
+                self.img_observations = self.img_observations[:, ::resample_frames]
+                self.actions = self.actions[:, ::resample_frames]
+
+            assert self.img_observations.shape[1] == int(seq_len * resample_factor)
+            assert self.actions.shape[1] == int(seq_len * resample_factor)
 
             if not use_visual_features:
                 if self.img_observations.shape[-1] in [3, 6, 9]:

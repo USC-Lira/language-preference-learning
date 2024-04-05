@@ -9,12 +9,12 @@ class CNNEncoder(nn.Module):
             nn.Conv2d(in_channels, 32, 3, stride=2),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(32, 32, 3, stride=1),
+            nn.Conv2d(32, 32, 3, stride=2),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
         )
 
-        self.repr_dim = 32 * 10 * 10 + action_dim
+        self.repr_dim = 32 * 5 * 5 + action_dim
 
         self.fc = nn.Sequential(
             nn.Linear(self.repr_dim, hidden_dim),
