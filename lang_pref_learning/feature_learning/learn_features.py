@@ -53,12 +53,12 @@ def load_data(args, split="train"):
     if args.use_img_obs:
         if args.use_stack_img_obs:
             if args.use_visual_features:
-                traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_features_stack.npy".format(split))
+                traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_features_stack_{args.n_frames}.npy")
             else:
-                traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs_stack.npy".format(split))
+                traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_obs_stack_{args.n_frames}.npy")
         else:
-            traj_img_obs_file = os.path.join(args.data_dir, "{}/traj_img_obs.npy".format(split))
-        action_file = os.path.join(args.data_dir, "{}/actions.npy".format(split))
+            traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_obs.npy")
+        action_file = os.path.join(args.data_dir, f"{split}/actions.npy")
         return_files_dict["traj_img_obs"] = traj_img_obs_file
         return_files_dict["actions"] = action_file
 
@@ -162,8 +162,6 @@ def train(logger, args):
         bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
         use_bert_encoder=args.use_bert_encoder,
         traj_encoder=args.traj_encoder,
-        use_cnn_in_transformer=args.use_cnn_in_transformer,
-        use_casual_attention=args.use_casual_attention,
         use_stack_img_obs=args.use_stack_img_obs,
         n_frames=args.n_frames,
         use_visual_features=args.use_visual_features,
@@ -501,35 +499,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--traj-encoder",
         default="mlp",
-        choices=["mlp", "transformer", "lstm", "cnn"],
+        choices=["mlp","lstm", "cnn"],
         help="which trajectory encoder to use",
-    )
-    parser.add_argument(
-        "--n-heads",
-        type=int,
-        default=4,
-        help="number of heads in the multi-head attention",
-    )
-    parser.add_argument(
-        "--n-layers",
-        type=int,
-        default=3,
-        help="number of layers in the trajectory transformer",
-    )
-    parser.add_argument(
-        "--use-cnn-in-transformer",
-        action="store_true",
-        help="whether to use CNN in the transformer",
-    )
-    parser.add_argument(
-        "--use-casual-attention",
-        action="store_true",
-        help="whether to use casual attention in the transformer",
-    )
-    parser.add_argument(
-        "--set-different-lr",
-        action="store_true",
-        help="whether to set different learning rates for different layers",
     )
     parser.add_argument(
         "--add-norm-loss",
@@ -546,6 +517,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n-frames", type=int, default=3, help="number of frames to stack")
     parser.add_argument("--use-visual-features", action="store_true", help="whether to use visual features")
+    parser.add_argument('--feature_extractor', type=str, default='resnet18', help='feature extractor')
     parser.add_argument("--visual-feature-dim", type=int, default=256, help="dimension of visual features")
     parser.add_argument("--resample", action="store_true", help="whether to resample the image observations")
     parser.add_argument("--resample-factor", type=float, default=0.1, help="resample factor")
