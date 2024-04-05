@@ -50,12 +50,14 @@ class NLTrajComparisonDataset(Dataset):
                 self.img_observations = self.img_observations[:, ::resample_frames]
                 self.actions = self.actions[:, ::resample_frames]
 
-            assert self.img_observations.shape[1] == int(seq_len * resample_factor)
+            assert self.img_observations.shape[1] == int(
+                seq_len * resample_factor
+            ), f"Image shape: {self.img_observations.shape}, expected: {seq_len * resample_factor}"
+
             assert self.actions.shape[1] == int(seq_len * resample_factor)
 
             if not use_visual_features:
-                if self.img_observations.shape[-1] in [3, 6, 9]:
-                    self.img_observations = rearrange(self.img_observations, "b t h w c -> b t c h w")
+                self.img_observations = rearrange(self.img_observations, "b t h w c -> b t c h w")
 
         self.max_len = seq_len
         self.preprocessed_nlcomps = preprocessed_nlcomps
@@ -78,7 +80,9 @@ class NLTrajComparisonDataset(Dataset):
             self.unique_nlcomps_tokens = []
             self.unique_nlcomps_attention_masks = []
             for nlcomp in nlcomps:
-                tokens = self.tokenizer.tokenize(self.tokenizer.cls_token + " " + nlcomp + " " + self.tokenizer.sep_token)
+                tokens = self.tokenizer.tokenize(
+                    self.tokenizer.cls_token + " " + nlcomp + " " + self.tokenizer.sep_token
+                )
                 token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
                 # Pad sequences to the common length
@@ -92,17 +96,21 @@ class NLTrajComparisonDataset(Dataset):
                 self.unique_nlcomps_attention_masks.append(attention_mask)
 
             self.unique_nlcomps_tokens = np.array(self.unique_nlcomps_tokens)
-            self.unique_nlcomps_attention_masks = np.array(
-                self.unique_nlcomps_attention_masks
-            )
+            self.unique_nlcomps_attention_masks = np.array(self.unique_nlcomps_attention_masks)
 
         # transform to torch tensors and move to device
         self.trajs = torch.tensor(self.trajs, dtype=torch.float32).to(device)
-        self.unique_nlcomps_tokens = torch.tensor(self.unique_nlcomps_tokens, dtype=torch.long).to(device)
-        self.unique_nlcomps_attention_masks = torch.tensor(self.unique_nlcomps_attention_masks, dtype=torch.long).to(device)
+        self.unique_nlcomps_tokens = torch.tensor(self.unique_nlcomps_tokens, dtype=torch.long).to(
+            device
+        )
+        self.unique_nlcomps_attention_masks = torch.tensor(
+            self.unique_nlcomps_attention_masks, dtype=torch.long
+        ).to(device)
 
         if self.use_img_obs:
-            self.img_observations = torch.tensor(self.img_observations, dtype=torch.float32).to(device)
+            self.img_observations = torch.tensor(self.img_observations, dtype=torch.float32).to(
+                device
+            )
             self.actions = torch.tensor(self.actions, dtype=torch.float32).to(device)
 
     def __len__(self):

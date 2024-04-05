@@ -27,19 +27,29 @@ os.environ["OMP_NUM_THREADS"] = "4"
 def load_data(args, split="train"):
     # Load the data.
     # nlcomp_index_file is a .npy file with the indexes of the nlcomps in the dataset.
-    nlcomp_index_file = os.path.join(args.data_dir, "{}/nlcomp_indexes.npy".format(split))
+    nlcomp_index_file = os.path.join(
+        args.data_dir, "{}/nlcomp_indexes.npy".format(split)
+    )
 
     # If we don't use bert in the language encoder, then we need to load the preprocessed nlcomps.
     if not args.use_bert_encoder:
-        unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.bert_model))
+        unique_nlcomp_file = os.path.join(
+            args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.bert_model)
+        )
     else:
-        unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps.json".format(split))
+        unique_nlcomp_file = os.path.join(
+            args.data_dir, "{}/unique_nlcomps.json".format(split)
+        )
 
     # traj_a_index_file is a .npy file with the indexes of the first trajectory in the dataset.
     # traj_b_index_file is a .npy file with the indexes of the second trajectory in the dataset.
     # traj_file is a .npy file with the trajectories of shape (n_trajectories, n_timesteps, STATE_DIM+ACTION_DIM)
-    traj_a_index_file = os.path.join(args.data_dir, "{}/traj_a_indexes.npy".format(split))
-    traj_b_index_file = os.path.join(args.data_dir, "{}/traj_b_indexes.npy".format(split))
+    traj_a_index_file = os.path.join(
+        args.data_dir, "{}/traj_a_indexes.npy".format(split)
+    )
+    traj_b_index_file = os.path.join(
+        args.data_dir, "{}/traj_b_indexes.npy".format(split)
+    )
     traj_file = os.path.join(args.data_dir, "{}/trajs.npy".format(split))
 
     return_files_dict = {
@@ -53,11 +63,22 @@ def load_data(args, split="train"):
     if args.use_img_obs:
         if args.use_stack_img_obs:
             if args.use_visual_features:
-                traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_features_stack_{args.n_frames}.npy")
+                traj_img_obs_file = os.path.join(
+                    args.data_dir,
+                    f"{split}/traj_img_features_{args.feature_extractor}_stack_{args.n_frames}.npy",
+                )
             else:
-                traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_obs_stack_{args.n_frames}.npy")
+                traj_img_obs_file = os.path.join(
+                    args.data_dir, f"{split}/traj_img_obs_stack_{args.n_frames}.npy"
+                )
         else:
-            traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_obs.npy")
+            if args.use_visual_features:
+                traj_img_obs_file = os.path.join(
+                    args.data_dir,
+                    f"{split}/traj_img_features_{args.feature_extractor}.npy",
+                )
+            else:
+                traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_obs.npy")
         action_file = os.path.join(args.data_dir, f"{split}/actions.npy")
         return_files_dict["traj_img_obs"] = traj_img_obs_file
         return_files_dict["actions"] = action_file
@@ -95,8 +116,12 @@ def evaluate(model, data_loader, device):
 
             reconstruction_loss = torch.tensor(0.0).to(device)
             if decoded_traj_a is not None and decoded_traj_b is not None:
-                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data["traj_a"], dim=-2))
-                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(data["traj_b"], dim=-2))
+                reconstruction_loss = F.mse_loss(
+                    decoded_traj_a, torch.mean(data["traj_a"], dim=-2)
+                )
+                reconstruction_loss += F.mse_loss(
+                    decoded_traj_b, torch.mean(data["traj_b"], dim=-2)
+                )
                 total_reconstruction_loss += reconstruction_loss.detach().cpu().item()
 
             norm_loss = F.mse_loss(
@@ -105,15 +130,21 @@ def evaluate(model, data_loader, device):
             )
             total_norm_loss += norm_loss.detach().cpu().item()
 
-            cos_sim = torch.mean(F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang))
+            cos_sim = torch.mean(
+                F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
+            )
             total_cosine_similarity += cos_sim.detach().cpu().item()
 
-            dot_prod = torch.einsum("ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang)
+            dot_prod = torch.einsum(
+                "ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang
+            )
             log_likelihood = torch.mean(logsigmoid(dot_prod))
             log_likelihood_loss = -1 * log_likelihood
             total_log_likelihood += -log_likelihood_loss.detach().cpu().item()
 
-            total_loss += (reconstruction_loss + log_likelihood_loss).detach().cpu().item()
+            total_loss += (
+                (reconstruction_loss + log_likelihood_loss).detach().cpu().item()
+            )
             total_num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
 
             # get evaluation time
@@ -124,7 +155,7 @@ def evaluate(model, data_loader, device):
 
     metrics = {
         "loss": total_loss / len(data_loader),
-        'reconstruction_loss': total_reconstruction_loss / len(data_loader),
+        "reconstruction_loss": total_reconstruction_loss / len(data_loader),
         "norm_loss": total_norm_loss / len(data_loader),
         "cosine_similarity": total_cosine_similarity / len(data_loader),
         "log_likelihood": total_log_likelihood / len(data_loader),
@@ -165,7 +196,12 @@ def train(logger, args):
         use_stack_img_obs=args.use_stack_img_obs,
         n_frames=args.n_frames,
         use_visual_features=args.use_visual_features,
-        visual_feature_dim=args.visual_feature_dim * args.n_frames if args.use_stack_img_obs else args.visual_feature_dim,
+        visual_feature_dim=(
+            args.visual_feature_dim * args.n_frames
+            if args.use_stack_img_obs
+            else args.visual_feature_dim
+        ),
+        seq_len=int(args.seq_len * args.resample_factor),
     )
 
     if args.use_bert_encoder:
@@ -184,7 +220,9 @@ def train(logger, args):
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
     model.to(device)
 
     # mean-squared error loss
@@ -206,6 +244,7 @@ def train(logger, args):
     val_action_file = val_files_dict.get("actions", None)
     test_action_file = test_files_dict.get("actions", None)
 
+    # apply downsample in train and val, but not in test
     train_dataset = NLTrajComparisonDataset(
         train_files_dict["nlcomp_index"],
         train_files_dict["traj_a_index"],
@@ -236,6 +275,7 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=val_img_obs_file,
         action_file=val_action_file,
+        use_visual_features=args.use_visual_features,
         resample=args.resample,
         resample_factor=args.resample_factor,
         device=device,
@@ -253,8 +293,7 @@ def train(logger, args):
         use_img_obs=args.use_img_obs,
         img_obs_file=test_img_obs_file,
         action_file=test_action_file,
-        resample=args.resample,
-        resample_factor=args.resample_factor,
+        use_visual_features=args.use_visual_features,
         device=device,
     )
 
@@ -284,7 +323,11 @@ def train(logger, args):
         logger.info("Initial loss sanity check...")
 
         val_metrics = evaluate(model, val_loader, device)
-        logger.info("initial val loss: {:.4f}, accuracy: {:.4f}".format(val_metrics["loss"], val_metrics["accuracy"]))
+        logger.info(
+            "initial val loss: {:.4f}, accuracy: {:.4f}".format(
+                val_metrics["loss"], val_metrics["accuracy"]
+            )
+        )
 
     logger.info("Beginning training...")
     train_losses = []
@@ -301,7 +344,9 @@ def train(logger, args):
         ep_cosine_sim = AverageMeter("cosine_similarity")
         ep_norm_loss = AverageMeter("norm_loss")
 
-        with tqdm(total=len(train_loader), unit="batch", position=0, leave=True) as pbar:
+        with tqdm(
+            total=len(train_loader), unit="batch", position=0, leave=True
+        ) as pbar:
             pbar.set_description(f"Epoch {epoch + 1}/{args.epochs}")
             for train_data in train_loader:
                 # load it to the active device
@@ -324,18 +369,30 @@ def train(logger, args):
                 # MSELoss already takes the mean over the batch.
                 reconstruction_loss = torch.tensor(0.0).to(device)
                 if decoded_traj_a is not None and decoded_traj_b is not None:
-                    reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(train_data["traj_a"], dim=-2))
-                    reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(train_data["traj_b"], dim=-2))
+                    reconstruction_loss = F.mse_loss(
+                        decoded_traj_a, torch.mean(train_data["traj_a"], dim=-2)
+                    )
+                    reconstruction_loss += F.mse_loss(
+                        decoded_traj_b, torch.mean(train_data["traj_b"], dim=-2)
+                    )
 
                 # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
-                cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
+                cos_sim = F.cosine_similarity(
+                    encoded_traj_b - encoded_traj_a, encoded_lang
+                )
                 cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
                 distance_loss = 1 - cos_sim  # Then convert the value to a loss.
 
-                dot_prod = torch.einsum("ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang)
+                dot_prod = torch.einsum(
+                    "ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang
+                )
                 log_likelihood = logsigmoid(dot_prod)
-                log_likelihood = torch.mean(log_likelihood)  # Take the mean over the batch.
-                log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
+                log_likelihood = torch.mean(
+                    log_likelihood
+                )  # Take the mean over the batch.
+                log_likelihood_loss = (
+                    -1 * log_likelihood
+                )  # Then convert the value to a loss.
 
                 # Norm loss, to make sure the encoded vectors are unit vectors
                 norm_loss = F.mse_loss(
@@ -358,8 +415,12 @@ def train(logger, args):
 
                 # add the mini-batch training loss to epoch loss
                 ep_loss.update(train_loss.item(), train_data["traj_a"].shape[0])
-                ep_reconstruction_loss.update(reconstruction_loss.item(), train_data["traj_a"].shape[0])
-                ep_log_likelihood_loss.update(log_likelihood_loss.item(), train_data["traj_a"].shape[0])
+                ep_reconstruction_loss.update(
+                    reconstruction_loss.item(), train_data["traj_a"].shape[0]
+                )
+                ep_log_likelihood_loss.update(
+                    log_likelihood_loss.item(), train_data["traj_a"].shape[0]
+                )
                 ep_cosine_sim.update(cos_sim.item(), train_data["traj_a"].shape[0])
                 ep_norm_loss.update(norm_loss.item(), train_data["traj_a"].shape[0])
 
@@ -415,7 +476,9 @@ def train(logger, args):
         val_cosine_similarities.append(val_cosine_similarity)
         val_log_likelihoods.append(val_log_likelihood)
         accuracies.append(val_acc)
-        np.save(os.path.join(args.save_dir, "train_losses.npy"), np.asarray(train_losses))
+        np.save(
+            os.path.join(args.save_dir, "train_losses.npy"), np.asarray(train_losses)
+        )
         np.save(os.path.join(args.save_dir, "val_losses.npy"), np.asarray(val_losses))
         np.save(
             os.path.join(args.save_dir, "val_reconstruction_losses.npy"),
@@ -432,7 +495,9 @@ def train(logger, args):
         np.save(os.path.join(args.save_dir, "accuracies.npy"), np.asarray(accuracies))
 
     # Test the model on the test set.
-    model.load_state_dict(torch.load(os.path.join(args.save_dir, "best_model_state_dict.pth")))
+    model.load_state_dict(
+        torch.load(os.path.join(args.save_dir, "best_model_state_dict.pth"))
+    )
     model.eval()
 
     test_metrics = evaluate(model, test_loader, device)
@@ -483,14 +548,18 @@ if __name__ == "__main__":
         action="store_true",
         help="whether to check initial loss",
     )
-    parser.add_argument("--finetune-bert", action="store_true", help="whether to finetune BERT")
+    parser.add_argument(
+        "--finetune-bert", action="store_true", help="whether to finetune BERT"
+    )
     parser.add_argument(
         "--save-dir",
         type=str,
         default="feature_learning/",
         help="where to save the model",
     )
-    parser.add_argument("--bert-model", type=str, default="bert-base", help="which BERT model to use")
+    parser.add_argument(
+        "--bert-model", type=str, default="bert-base", help="which BERT model to use"
+    )
     parser.add_argument(
         "--use-bert-encoder",
         action="store_true",
@@ -499,7 +568,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--traj-encoder",
         default="mlp",
-        choices=["mlp","lstm", "cnn"],
+        choices=["mlp", "lstm", "cnn"],
         help="which trajectory encoder to use",
     )
     parser.add_argument(
@@ -508,19 +577,46 @@ if __name__ == "__main__":
         help="whether to add norm loss to the total loss",
     )
 
-    parser.add_argument('--seq-len', type=int, default=500, help='sequence length for the trajectory')
-    parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
+    parser.add_argument(
+        "--seq-len", type=int, default=500, help="sequence length for the trajectory"
+    )
+    parser.add_argument(
+        "--use-img-obs", action="store_true", help="whether to use image observations"
+    )
     parser.add_argument(
         "--use-stack-img-obs",
         action="store_true",
         help="whether to use stacked image observations",
     )
-    parser.add_argument("--n-frames", type=int, default=3, help="number of frames to stack")
-    parser.add_argument("--use-visual-features", action="store_true", help="whether to use visual features")
-    parser.add_argument('--feature_extractor', type=str, default='resnet18', help='feature extractor')
-    parser.add_argument("--visual-feature-dim", type=int, default=256, help="dimension of visual features")
-    parser.add_argument("--resample", action="store_true", help="whether to resample the image observations")
-    parser.add_argument("--resample-factor", type=float, default=0.1, help="resample factor")
+    parser.add_argument(
+        "--n-frames", type=int, default=3, help="number of frames to stack"
+    )
+    parser.add_argument(
+        "--use-visual-features",
+        action="store_true",
+        help="whether to use visual features",
+    )
+    parser.add_argument(
+        "--feature-extractor",
+        type=str,
+        default="resnet18",
+        choices=["resnet18", "efficientnetb3"],
+        help="feature extractor",
+    )
+    parser.add_argument(
+        "--visual-feature-dim",
+        type=int,
+        default=256,
+        help="dimension of visual features",
+    )
+    parser.add_argument(
+        "--resample",
+        action="store_true",
+        help="whether to resample the image observations",
+    )
+    parser.add_argument(
+        "--resample-factor", type=float, default=1.0, help="resample factor"
+    )
 
     args = parser.parse_args()
 

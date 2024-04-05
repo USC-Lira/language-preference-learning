@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.models import EfficientNet_B3_Weights, efficientnet_b3
+from torchvision.models import resnet18, ResNet18_Weights
 
 from einops import rearrange
 
@@ -12,9 +13,13 @@ train_img_obs = np.load(f'{dataset_dir}/train/traj_img_obs.npy')
 val_img_obs = np.load(f'{dataset_dir}/val/traj_img_obs.npy')
 test_img_obs = np.load(f'{dataset_dir}/test/traj_img_obs.npy')
 
-en = efficientnet_b3(weights=EfficientNet_B3_Weights.IMAGENET1K_V1).to('cuda')
-extractor = nn.Sequential(*list(en.children())[:-1])
-transform = EfficientNet_B3_Weights.IMAGENET1K_V1.transforms()
+
+extractor_name = 'resnet18'
+net = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to('cuda')
+# extractor = 'efficientnetb3'
+# net = efficientnet_b3(weights=EfficientNet_B3_Weights.IMAGENET1K_V1).to('cuda')
+extractor = nn.Sequential(*list(net.children())[:-2])
+transform = ResNet18_Weights.IMAGENET1K_V1.transforms()
 
 
 def extract_features(img_obs, batch_size=32):
@@ -27,7 +32,7 @@ def extract_features(img_obs, batch_size=32):
             x = rearrange(x, 'b h w c -> b c h w')
             x = transform(x)
             feature = extractor(x.to('cuda'))
-            feature = torch.flatten(feature, 1)
+            # feature = torch.flatten(feature, 1)
             curr_traj.append(feature.detach().cpu().numpy())
         
         curr_traj = np.concatenate(curr_traj, axis=0)
@@ -38,16 +43,16 @@ def extract_features(img_obs, batch_size=32):
         if i % 10 == 0:
             print(f'Processed {i} trajectories')
     
-    features = rearrange(features, 'b t d -> b t d')
+    features = rearrange(features, 'b t c h w -> b t c h w')
     assert features.shape[0] == len(img_obs), f'{features.shape[0]} != {len(img_obs)}'
 
     return features
 
 train_img_features = extract_features(train_img_obs)
-np.save(f'{dataset_dir}/train/traj_img_features.npy', train_img_features)
+np.save(f'{dataset_dir}/train/traj_img_features_{extractor_name}.npy', train_img_features)
 
 val_img_features = extract_features(val_img_obs)
-np.save(f'{dataset_dir}/val/traj_img_features.npy', val_img_features)
+np.save(f'{dataset_dir}/val/traj_img_features_{extractor_name}.npy', val_img_features)
 
 test_img_features = extract_features(test_img_obs)
-np.save(f'{dataset_dir}/test/traj_img_features.npy', test_img_features)
+np.save(f'{dataset_dir}/test/traj_img_features_{extractor_name}.npy', test_img_features)

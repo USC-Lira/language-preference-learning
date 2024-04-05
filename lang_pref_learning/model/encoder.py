@@ -45,6 +45,7 @@ class NLTrajAutoencoder(nn.Module):
         n_frames=3,
         use_visual_features=False,
         visual_feature_dim=256,
+        seq_len=500,
     ):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
@@ -58,7 +59,7 @@ class NLTrajAutoencoder(nn.Module):
         elif traj_encoder == "cnn":
             if use_visual_features:
                 self.traj_encoder = VisualMLP(
-                    in_feature_dim=visual_feature_dim // n_frames if use_stack_img_obs else visual_feature_dim,
+                    in_feature_channel=visual_feature_dim // n_frames if use_stack_img_obs else visual_feature_dim,
                     action_dim=ACTION_DIM,
                     hidden_dim=encoder_hidden_dim,
                     out_dim=feature_dim,
