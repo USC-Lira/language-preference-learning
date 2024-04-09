@@ -211,7 +211,7 @@ def train(logger, args):
                 param.requires_grad = False
         else:
             # Load the model.
-            model_path = os.path.join(exp_dir, "best_model_state_dict.pth")
+            model_path = os.path.join(exp_dir, "model_state_dict_0.pth")
             logger.info(f"Loaded model from: {model_path}")
             model.load_state_dict(torch.load(model_path))
 
@@ -336,7 +336,7 @@ def train(logger, args):
     val_cosine_similarities = []
     val_log_likelihoods = []
     accuracies = []
-    best_val_cos_sim = 0
+    best_val_cos_sim = -1
     for epoch in range(args.epochs):
         ep_loss = AverageMeter("loss")
         ep_log_likelihood_loss = AverageMeter("log_likelihood_loss")
@@ -600,7 +600,7 @@ if __name__ == "__main__":
         "--feature-extractor",
         type=str,
         default="resnet18",
-        choices=["resnet18", "efficientnetb3"],
+        choices=["resnet18", "efficientnetb3", "s3d"],
         help="feature extractor",
     )
     parser.add_argument(

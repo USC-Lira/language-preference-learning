@@ -50,6 +50,7 @@ class NLTrajAutoencoder(nn.Module):
         super().__init__()
         # TODO: can later make encoders and decoders transformers
         self.traj_encoder_cls = traj_encoder
+        self.use_visual_features = use_visual_features
         if traj_encoder == "mlp":
             self.traj_encoder = nn.Sequential(
                 nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
@@ -59,7 +60,7 @@ class NLTrajAutoencoder(nn.Module):
         elif traj_encoder == "cnn":
             if use_visual_features:
                 self.traj_encoder = VisualMLP(
-                    in_feature_channel=visual_feature_dim // n_frames if use_stack_img_obs else visual_feature_dim,
+                    in_feature_dim=visual_feature_dim // n_frames if use_stack_img_obs else visual_feature_dim,
                     action_dim=ACTION_DIM,
                     hidden_dim=encoder_hidden_dim,
                     out_dim=feature_dim,
@@ -126,8 +127,9 @@ class NLTrajAutoencoder(nn.Module):
             encoded_traj_b = encoded_traj_b
         elif self.traj_encoder_cls == "mlp" or self.traj_encoder_cls == "cnn":
             # Take the mean over timesteps
-            encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
-            encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+            if not self.use_visual_features:
+                encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
+                encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
         else:
             raise ValueError(f"Trajectory encoder {self.traj_encoder} not found")
 
