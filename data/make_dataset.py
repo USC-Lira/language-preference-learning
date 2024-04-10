@@ -4,7 +4,7 @@ import json
 import numpy as np
 import argparse
 import os
-from utils import generate_synthetic_comparisons_commands, generate_noisyaugmented_synthetic_comparisons_commands, \
+from utils import generate_synthetic_comparisons_commands, generate_noisy_augmented_synthetic_comparisons_commands, \
     calc_and_set_global_vars
 
 
@@ -14,9 +14,13 @@ def get_comparisons(traj_i, traj_j, noise_augmentation=0, aug_comps=None, valida
                                                         validation=validation, split=split)
 
     else:
-        comps = generate_noisyaugmented_synthetic_comparisons_commands(traj_i, traj_j, n_duplicates=noise_augmentation,
-                                                                       augmented_comps=aug_comps, validation=validation,
-                                                                       split=split)
+        if split == 'train':
+            comps = generate_noisy_augmented_synthetic_comparisons_commands(traj_i, traj_j, n_duplicates=noise_augmentation,
+                                                                        augmented_comps=aug_comps, validation=validation,
+                                                                        split=split)
+        else:
+            comps = generate_synthetic_comparisons_commands(traj_i, traj_j, augmented_comps=aug_comps,
+                                                            validation=validation, split=split)
 
     return comps
 
@@ -76,19 +80,25 @@ def generate_dataset(trajs, noise_augmentation=0, id_mapping=False, all_pairs=Tr
 
     else:
         print("GENERATING " + str(dataset_size) + " RANDOM COMPARISONS.")
+        generated_pairs = []
         for n in range(dataset_size):
-            print("GENERATING COMPARISONS FOR n =", n)
+            # print("GENERATING COMPARISONS FOR n =", n)
             i = 0
             j = 0
-            while i == j:
+            while i == j or (i, j) in generated_pairs or (j, i) in generated_pairs:
                 i = np.random.randint(num_trajectories)
                 j = np.random.randint(num_trajectories)
+            
+            generated_pairs.append((i, j))
+
 
             traj_i = trajs[i]
             traj_j = trajs[j]
 
-            comps = get_comparisons(traj_i, traj_j, noise_augmentation=noise_augmentation)
-            flipped_comps = get_comparisons(traj_j, traj_i, noise_augmentation=noise_augmentation)
+            comps = get_comparisons(traj_i, traj_j, noise_augmentation=noise_augmentation,
+                                    aug_comps=augmented_comps_mapping, validation=validation, split=split)
+            flipped_comps = get_comparisons(traj_j, traj_i, noise_augmentation=noise_augmentation,
+                                            aug_comps=augmented_comps_mapping, validation=validation, split=split)
 
             if id_mapping:  # With this option, we store the indexes of the `trajs` array rather than the actual trajectory
                 for c in comps:
@@ -201,14 +211,14 @@ if __name__ == '__main__':
         os.makedirs(output_dir)
 
     generate_and_save_dataset(train_trajectories, os.path.join(output_dir, 'train'),
-                              noise_augmentation=noise_augmentation,
-                              split='train', id_mapping=args.id_mapping, lang_aug=True)
+                              noise_augmentation=noise_augmentation, dataset_size=dataset_size,
+                              all_pairs=args.all_pairs, split='train', id_mapping=args.id_mapping, lang_aug=True)
 
     generate_and_save_dataset(val_trajectories, os.path.join(output_dir, 'val'), split='val',
-                              id_mapping=args.id_mapping, lang_aug=True)
+                              all_pairs=True, id_mapping=args.id_mapping, lang_aug=True)
 
     generate_and_save_dataset(test_trajectories, os.path.join(output_dir, 'test'), split='test',
-                              id_mapping=args.id_mapping, lang_aug=True)
+                              all_pairs=True, id_mapping=args.id_mapping, lang_aug=True)
     
     if use_img_obs:
         # Save the image observations and actions
