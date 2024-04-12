@@ -13,8 +13,7 @@ class CNNEncoder(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
         )
-
-        self.repr_dim = 32 * 5 * 5 + action_dim
+        self.repr_dim = 32 * 6 * 6 + action_dim
 
         self.fc = nn.Sequential(
             nn.Linear(self.repr_dim, hidden_dim),
@@ -24,7 +23,8 @@ class CNNEncoder(nn.Module):
 
     def forward(self, imgs, actions):
         # inputs is a tensor of shape (batch_size, timesteps, n_channels, height, width)
-        imgs = imgs / 255.0
+        if imgs.max() > 1:
+            imgs = imgs / 255.0
         original_imgs_shape = imgs.shape
         if len(original_imgs_shape) == 5:
             imgs = imgs.view(-1, *imgs.shape[-3:])
@@ -32,6 +32,7 @@ class CNNEncoder(nn.Module):
         if len(actions.shape) == 3:
             actions = actions.view(-1, actions.shape[-1])
 
+        # import ipdb; ipdb.set_trace()
         x = self.convnet(imgs)
         x = x.reshape(x.size(0), -1)
         x = torch.cat([x, actions], dim=-1)

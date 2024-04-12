@@ -42,21 +42,21 @@ class NLTrajComparisonDataset(Dataset):
             self.img_observations = np.load(img_obs_file)
             self.actions = np.load(action_file)
 
-            self.img_observations = self.img_observations[:, :seq_len]
-            self.actions = self.actions[:, :seq_len]
-
-            if resample:
-                resample_frames = int(1 / resample_factor)
-                self.img_observations = self.img_observations[:, ::resample_frames]
-                self.actions = self.actions[:, ::resample_frames]
-
-            assert self.img_observations.shape[1] == int(
-                seq_len * resample_factor
-            ), f"Image shape: {self.img_observations.shape}, expected: {seq_len * resample_factor}"
-
-            assert self.actions.shape[1] == int(seq_len * resample_factor)
-
             if not use_visual_features:
+                self.img_observations = self.img_observations[:, :seq_len]
+                self.actions = self.actions[:, :seq_len]
+
+                if resample:
+                    resample_frames = int(1 / resample_factor)
+                    self.img_observations = self.img_observations[:, ::resample_frames]
+                    self.actions = self.actions[:, ::resample_frames]
+
+                assert self.img_observations.shape[1] == int(
+                    seq_len * resample_factor
+                ), f"Image shape: {self.img_observations.shape}, expected: {seq_len * resample_factor}"
+
+                assert self.actions.shape[1] == int(seq_len * resample_factor)
+                
                 self.img_observations = rearrange(self.img_observations, "b t h w c -> b t c h w")
 
         self.max_len = seq_len
