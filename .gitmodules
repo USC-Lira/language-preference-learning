@@ -1,3 +1,9 @@
 [submodule "S3D_HowTo100M"]
 	path = S3D_HowTo100M
 	url = https://github.com/antoine77340/S3D_HowTo100M.git
+[submodule "Detic"]
+	path = Detic
+	url = https://github.com/facebookresearch/Detic.git
+[submodule "detectron2"]
+	path = detectron2
+	url = git@github.com:facebookresearch/detectron2.git

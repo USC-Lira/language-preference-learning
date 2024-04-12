@@ -89,7 +89,7 @@ def calc_and_set_global_vars(trajs):
 
 # NOTE: For this function, we produce commands that would change traj1 to traj2.
 def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, augmented_comps=None, validation=False,
-                                            split='train'):
+                                            split='train', sample_comps_train=1):
     horizon = len(traj1)
 
     value_func = {
@@ -143,7 +143,10 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
             for comp in comps:
                 if split == 'train':
                     num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
-                    new_comps = augmented_comps[comp][: num_comps_train]
+                    # randomly sample N commands from the augmented commands
+                    comps_idx = np.random.choice(num_comps_train, sample_comps_train, replace=False)
+                    # new_comps = augmented_comps[comp][comps_idx]
+                    new_comps = [augmented_comps[comp][idx] for idx in comps_idx]
                 elif split == 'val':
                     num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
                     num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
@@ -260,7 +263,7 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
 # We generate n comparisons per trajectory pair, where the proportion that are greaterly labeled
 # is equal to the sigmoid of the difference in the feature values.
 # IMPORTANT: User needs to have run calc_and_set_global_vars() at some point before this function.
-def generate_noisyaugmented_synthetic_comparisons_commands(traj1, traj2, n_duplicates, feature_name=None,
+def generate_noisy_augmented_synthetic_comparisons_commands(traj1, traj2, n_duplicates, feature_name=None,
                                                            augmented_comps=None, validation=False, split='train'):
     horizon = len(traj1)
     value_func = {

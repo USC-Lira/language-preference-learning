@@ -1,4 +1,5 @@
 import os
+import argparse
 import torch
 import numpy as np
 from einops import rearrange
@@ -71,7 +72,7 @@ def flip(img_obs):
     return flipped_img_obs
 
 
-def center_crop(img_obs):
+def crop(img_obs):
     """
     Center crop the images
     """
@@ -99,6 +100,8 @@ def center_crop(img_obs):
         cropped_img_obs[i*batch_size:(i+1)*batch_size] = transforms.functional.crop(img_obs[i*batch_size:(i+1)*batch_size],
                                                                                     15, 26,
                                                                                     172, 172)
+    
+    cropped_img_obs = transforms.Resize((224, 224))(cropped_img_obs)
 
     # save one image as an example
     save_image(cropped_img_obs[0], 'data/cropped_img_obs_example.png')
@@ -108,21 +111,26 @@ def center_crop(img_obs):
     return cropped_img_obs
 
 
-
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--transform', type=str, help='which transformation to apply')
+    args = parser.parse_args()
+
     # Load the images
-    img_obs = np.load('data/data_img_obs_res_224_more/val/traj_img_obs_raw.npy')
+    img_obs = np.load('data/data_img_obs_res_224_30k/train/traj_img_obs_sample.npy')
+    
+    transfrom_funcs = {
+        'resize': resize,
+        'flip': flip,
+        'crop': crop,
+    }
 
     # Apply the transformations
-    resized_img_obs = resize(img_obs)
-    # print(resized_img_obs.shape)
-    # flipped_img_obs = flip(img_obs)
-    transformed_img_obs = resized_img_obs
+    transformed_img_obs = transfrom_funcs[args.transform](img_obs)
 
     # Save the resized images
-    save_dir = 'data/data_img_obs_res_112_more/val'
+    save_dir = 'data/data_img_obs_res_224_30k/train'
     os.makedirs(save_dir, exist_ok=True)
-    np.save(f'{save_dir}/traj_img_obs.npy', transformed_img_obs.numpy())
+    np.save(f'{save_dir}/traj_img_obs_sample.npy', transformed_img_obs.numpy())
 
 
