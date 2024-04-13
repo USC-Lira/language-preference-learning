@@ -10,8 +10,8 @@ import cv2
 
 from einops import rearrange
 
-sys.path.insert(0, f'../Detic/')
-sys.path.insert(0, f'../Detic/third_party/CenterNet2/')
+sys.path.insert(0, f'Detic/')
+sys.path.insert(0, f'Detic/third_party/CenterNet2/')
 
 from centernet.config import add_centernet_config
 
@@ -203,8 +203,8 @@ if __name__ == "__main__":
     demo = VisualizationDemo(cfg, args)
     predictor = demo.predictor
 
-    data_dir = 'data_img_obs_res_224_30k'
-    img_obs = np.load(f'{data_dir}/train/traj_img_obs_sample.npy')
+    data_dir = 'data/data_img_obs_res_224_30k/train'
+    img_obs = np.load(f'{data_dir}/traj_img_obs.npy')
 
     sam_checkpoint = "sam_vit_b_01ec64.pth"
     model_type = "vit_b"
@@ -253,4 +253,4 @@ if __name__ == "__main__":
             seg_imgs = rearrange(seg_imgs, 'b h w c -> b h w c')
             seg_img_obs[i][j * batch_size: (j + 1) * batch_size] = seg_imgs
     
-    np.save(f'{data_dir}/train/traj_seg_img_obs.npy', seg_img_obs)
+    np.save(f'{data_dir}/traj_seg_img_obs.npy', seg_img_obs)
