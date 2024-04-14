@@ -6,6 +6,8 @@ from lang_pref_learning.model.transformer import TransformerEncoder
 from lang_pref_learning.model.lstm import LSTMEncoder
 from lang_pref_learning.model.cnn import CNNEncoder
 from lang_pref_learning.model.visual_mlp import VisualMLP
+from lang_pref_learning.model.visual_transformer import ImageTrajectoryTransformer
+from data.utils import OBJECT_STATE_DIM, PROPRIO_STATE_DIM
 
 STATE_DIM = 65
 ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
@@ -79,6 +81,14 @@ class NLTrajAutoencoder(nn.Module):
                 hidden_dim=encoder_hidden_dim,
                 output_dim=feature_dim,
             )
+        elif traj_encoder == 'visual-transformer':
+            self.traj_encoder = ImageTrajectoryTransformer(
+                feature_dim=visual_feature_dim,
+                d_model=feature_dim,
+                n_head=4,
+                n_layers=2,
+                dropout=0.1
+            )
         else:
             raise ValueError(f"Trajectory encoder {traj_encoder} not found")
 
@@ -105,19 +115,23 @@ class NLTrajAutoencoder(nn.Module):
     # traj_a has shape (n_trajs, n_timesteps, state+action)
     def forward(self, inputs):
         # NOTE: traj_a is the reference, traj_b is the updated
-        if self.traj_encoder_cls == "cnn":
-            traj_a, actions_a = inputs["traj_a_img_obs"], inputs["actions_a"]
-            traj_b, actions_b = inputs["traj_b_img_obs"], inputs["actions_b"]
-        else:
-            traj_a = inputs["traj_a"]
-            traj_b = inputs["traj_b"]
+        traj_a = inputs["traj_a"]
+        traj_b = inputs["traj_b"]
 
         # Encode trajectories
         if self.traj_encoder_cls == "cnn":
-            actions_a = inputs["actions_a"]
-            actions_b = inputs["actions_b"]
-            encoded_traj_a = self.traj_encoder(traj_a, actions_a)
-            encoded_traj_b = self.traj_encoder(traj_b, actions_b)
+            inputs_a = {
+                "state": inputs["traj_a"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM],
+                "img_obs": inputs["img_obs_a"],
+                "actions": inputs["actions_a"],
+            }
+            inputs_b = {
+                "state": inputs["traj_b"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM],
+                "img_obs": inputs["img_obs_b"],
+                "actions": inputs["actions_b"],
+            }
+            encoded_traj_a = self.traj_encoder(inputs_a)
+            encoded_traj_b = self.traj_encoder(inputs_b)
         else:
             encoded_traj_a = self.traj_encoder(traj_a)
             encoded_traj_b = self.traj_encoder(traj_b)
@@ -130,6 +144,9 @@ class NLTrajAutoencoder(nn.Module):
             if not self.use_visual_features:
                 encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
                 encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+        elif self.traj_encoder_cls == 'visual-transformer':
+            encoded_traj_a = encoded_traj_a.mean(dim=-2)
+            encoded_traj_b = encoded_traj_b.mean(dim=-2)
         else:
             raise ValueError(f"Trajectory encoder {self.traj_encoder} not found")
 
@@ -145,7 +162,7 @@ class NLTrajAutoencoder(nn.Module):
             encoded_lang = self.lang_encoder(lang_embeds)
 
         # NOTE: traj_a is the reference, traj_b is the updated
-        if not self.traj_encoder_cls == "cnn":
+        if not (self.traj_encoder_cls == "cnn" or self.traj_encoder_cls == "visual-transformer"):
             decoded_traj_a = self.traj_decoder(encoded_traj_a)
             decoded_traj_b = self.traj_decoder(encoded_traj_b)
         else:

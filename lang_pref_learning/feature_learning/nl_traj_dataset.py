@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import Dataset
 import json
 import numpy as np
-
 from einops import rearrange
 
 
@@ -42,21 +41,18 @@ class NLTrajComparisonDataset(Dataset):
             self.img_observations = np.load(img_obs_file)
             self.actions = np.load(action_file)
 
+            if resample:
+                resample_frames = int(1 / resample_factor)
+                self.trajs = self.trajs[:, ::resample_frames]
+                self.img_observations = self.img_observations[:, ::resample_frames]
+                self.actions = self.actions[:, ::resample_frames]
+
+                # assert self.img_observations.shape[1] == int(
+                #     seq_len * resample_factor
+                # ), f"Image shape: {self.img_observations.shape}, expected: {seq_len * resample_factor}"
+
+                # assert self.actions.shape[1] == int(seq_len * resample_factor)
             if not use_visual_features:
-                self.img_observations = self.img_observations[:, :seq_len]
-                self.actions = self.actions[:, :seq_len]
-
-                if resample:
-                    resample_frames = int(1 / resample_factor)
-                    self.img_observations = self.img_observations[:, ::resample_frames]
-                    self.actions = self.actions[:, ::resample_frames]
-
-                assert self.img_observations.shape[1] == int(
-                    seq_len * resample_factor
-                ), f"Image shape: {self.img_observations.shape}, expected: {seq_len * resample_factor}"
-
-                assert self.actions.shape[1] == int(seq_len * resample_factor)
-                
                 self.img_observations = rearrange(self.img_observations, "b t h w c -> b t c h w")
 
         self.max_len = seq_len
@@ -126,8 +122,8 @@ class NLTrajComparisonDataset(Dataset):
         }
 
         if self.use_img_obs:
-            data["traj_a_img_obs"] = self.img_observations[self.traj_as[idx]]
-            data["traj_b_img_obs"] = self.img_observations[self.traj_bs[idx]]
+            data["img_obs_a"] = self.img_observations[self.traj_as[idx]]
+            data["img_obs_b"] = self.img_observations[self.traj_bs[idx]]
             data["actions_a"] = self.actions[self.traj_as[idx]]
             data["actions_b"] = self.actions[self.traj_bs[idx]]
 

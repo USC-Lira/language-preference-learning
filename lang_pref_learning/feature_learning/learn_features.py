@@ -401,6 +401,8 @@ def train(logger, args):
         img_obs_file=test_img_obs_file,
         action_file=test_action_file,
         use_visual_features=args.use_visual_features,
+        resample=args.resample,
+        resample_factor=args.resample_factor,
         device=device,
     )
 
@@ -584,7 +586,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--traj-encoder",
         default="mlp",
-        choices=["mlp", "lstm", "cnn"],
+        choices=["mlp", "lstm", "cnn", "visual-transformer"],
         help="which trajectory encoder to use",
     )
     parser.add_argument(

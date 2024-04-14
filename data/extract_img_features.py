@@ -7,19 +7,19 @@ from torchvision.models import resnet18, ResNet18_Weights
 
 from einops import rearrange
 
-dataset_dir = dataset_dir = f'{os.getcwd()}/data/data_img_obs_res_224'
+dataset_dir = dataset_dir = f'{os.getcwd()}/data/data_seg_img_obs_res_224'
 
 train_img_obs = np.load(f'{dataset_dir}/train/traj_img_obs.npy')
 val_img_obs = np.load(f'{dataset_dir}/val/traj_img_obs.npy')
 test_img_obs = np.load(f'{dataset_dir}/test/traj_img_obs.npy')
 
 
-extractor_name = 'resnet18'
-net = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to('cuda')
-# extractor = 'efficientnetb3'
-# net = efficientnet_b3(weights=EfficientNet_B3_Weights.IMAGENET1K_V1).to('cuda')
-extractor = nn.Sequential(*list(net.children())[:-2])
-transform = ResNet18_Weights.IMAGENET1K_V1.transforms()
+# extractor_name = 'resnet18'
+# net = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to('cuda')
+extractor_name = 'efficientnetb3'
+net = efficientnet_b3(weights=EfficientNet_B3_Weights.IMAGENET1K_V1).to('cuda')
+extractor = nn.Sequential(*list(net.children())[:-1])
+transform = ResNet18_Weights.IMAGENET1K_V1.transforms(antialias=True)
 
 
 def extract_features(img_obs, batch_size=32):
@@ -32,7 +32,7 @@ def extract_features(img_obs, batch_size=32):
             x = rearrange(x, 'b h w c -> b c h w')
             x = transform(x)
             feature = extractor(x.to('cuda'))
-            # feature = torch.flatten(feature, 1)
+            feature = torch.flatten(feature, 1)
             curr_traj.append(feature.detach().cpu().numpy())
         
         curr_traj = np.concatenate(curr_traj, axis=0)
@@ -43,7 +43,7 @@ def extract_features(img_obs, batch_size=32):
         if i % 10 == 0:
             print(f'Processed {i} trajectories')
     
-    features = rearrange(features, 'b t c h w -> b t c h w')
+    features = rearrange(features, 'b t d -> b t d')
     assert features.shape[0] == len(img_obs), f'{features.shape[0]} != {len(img_obs)}'
 
     return features

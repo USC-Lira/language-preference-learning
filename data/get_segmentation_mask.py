@@ -95,6 +95,17 @@ def get_parser():
         default=[],
         nargs=argparse.REMAINDER,
     )
+    parser.add_argument(
+        "--data-dir",
+        default="data/data_img_obs_res_224_30k/train",
+        help="The directory containing the data.",
+    )
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="The start index of the data.",
+    )
     return parser
 
 
@@ -203,7 +214,7 @@ if __name__ == "__main__":
     demo = VisualizationDemo(cfg, args)
     predictor = demo.predictor
 
-    data_dir = 'data/data_img_obs_res_224_30k/train'
+    data_dir = args.data_dir
     img_obs = np.load(f'{data_dir}/traj_img_obs.npy')
 
     sam_checkpoint = "sam_vit_b_01ec64.pth"
@@ -213,10 +224,9 @@ if __name__ == "__main__":
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
 
-    seg_img_obs = np.zeros_like(img_obs)
-
-    for i in tqdm.tqdm(range(len(img_obs))):
+    for i in tqdm.tqdm(range(args.start_index, len(img_obs))):
         traj_img_obs = img_obs[i]
+        traj_seg_img_obs = np.zeros_like(traj_img_obs)
 
         # Process images in the trajectory by batch
         batch_size = 4
@@ -226,10 +236,20 @@ if __name__ == "__main__":
             curr_img_obs = traj_img_obs[j * batch_size: (j + 1) * batch_size]
 
             # Detect objects in the images
-            pred_boxes = detect_objects_in_image(curr_img_obs, predictor)
+            try:
+                pred_boxes = detect_objects_in_image(curr_img_obs, predictor)
+            except RuntimeError as e:
+                print(e)
+                print(f'Error in traj {i}, batch {j}')
+                break
 
             # Segment objects in the images
-            seg_masks = segment_objects(curr_img_obs, pred_boxes, sam)
+            try:
+                seg_masks = segment_objects(curr_img_obs, pred_boxes, sam)
+            except RuntimeError as e:
+                print(e)
+                print(f'Error in traj {i}, batch {j}')
+                break
 
             seg_imgs = []
             for k in range(len(curr_img_obs)):
@@ -251,6 +271,9 @@ if __name__ == "__main__":
                     cv2.imwrite(f'{save_dir}/{i}_{j}_{k}.png', seg_img)
             
             seg_imgs = rearrange(seg_imgs, 'b h w c -> b h w c')
-            seg_img_obs[i][j * batch_size: (j + 1) * batch_size] = seg_imgs
-    
-    np.save(f'{data_dir}/traj_seg_img_obs.npy', seg_img_obs)
+            traj_seg_img_obs[j * batch_size: (j + 1) * batch_size] = seg_imgs
+        
+        seg_data_dir = f'{data_dir}/seg_img_obs'
+        if not os.path.exists(seg_data_dir):
+            os.makedirs(seg_data_dir)
+        np.save(f'{seg_data_dir}/{i}.npy', traj_seg_img_obs)

@@ -35,6 +35,8 @@ def extract_features(model, img_obs):
     Returns:
         - A list of features extracted from the video trajectories.
     """
+    assert img_obs.max() <= 1, 'Image observations should be normalized to [0, 1]'
+    
     features = []
     for i in range(len(img_obs)):
         curr_img_obs = img_obs[i]
@@ -47,7 +49,7 @@ def extract_features(model, img_obs):
 
         # Get the features from the mixed_5c layer of S3D
         video_output = model(curr_img_obs)
-        feature = video_output['mixed_5c']
+        feature = video_output['video_embedding']
 
         features.append(feature.squeeze(0).detach().cpu().numpy())
         
@@ -70,7 +72,7 @@ if __name__ == '__main__':
     net.eval()
 
     # Load the data
-    dataset_dir = f'{os.getcwd()}/data/data_img_obs_res_224'
+    dataset_dir = f'{os.getcwd()}/data/data_seg_img_obs_res_224'
     train_img_obs = np.load(f'{dataset_dir}/train/traj_img_obs.npy')
     val_img_obs = np.load(f'{dataset_dir}/val/traj_img_obs.npy')
     test_img_obs = np.load(f'{dataset_dir}/test/traj_img_obs.npy')

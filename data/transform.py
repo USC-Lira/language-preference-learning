@@ -8,7 +8,7 @@ from torchvision import transforms
 from torchvision.utils import save_image
 
 
-def resize(img_obs, size=112):
+def resize(img_obs, size=112, flip=False):
     """
     Resize the images
     """
@@ -18,10 +18,16 @@ def resize(img_obs, size=112):
     img_obs = rearrange(img_obs, 'b t h w c -> (b t) c h w')
 
     resize = transforms.Compose([
-        transforms.functional.vflip,
         transforms.Resize((112, 112)),
     ]
     )
+
+    if flip:
+        resize = transforms.Compose([
+            transforms.Resize((112, 112)),
+            transforms.functional.vflip,
+        ]
+        )
 
     resized_img_obs = torch.zeros((img_obs.shape[0], 3, size, size))
 
@@ -33,7 +39,7 @@ def resize(img_obs, size=112):
         resized_img_obs[i*batch_size:(i+1)*batch_size] = resize(img_obs[i*batch_size:(i+1)*batch_size])
 
     # save one image as an example
-    save_image(resized_img_obs[0], 'data/resized_img_obs_example.png')
+    save_image(resized_img_obs[0], 'resized_img_obs_example.png')
 
     resized_img_obs = rearrange(resized_img_obs, '(b t) c h w -> b t h w c', b=total_num)
 
@@ -65,7 +71,7 @@ def flip(img_obs):
         flipped_img_obs[i*batch_size:(i+1)*batch_size] = flip(img_obs[i*batch_size:(i+1)*batch_size])
 
     # save one image as an example
-    save_image(flipped_img_obs[0], 'data/flipped_img_obs_example.png')
+    save_image(flipped_img_obs[0], 'flipped_img_obs_example.png')
 
     flipped_img_obs = rearrange(flipped_img_obs, '(b t) c h w -> b t h w c', b=num_trajs)
 
@@ -104,7 +110,7 @@ def crop(img_obs):
     cropped_img_obs = transforms.Resize((224, 224))(cropped_img_obs)
 
     # save one image as an example
-    save_image(cropped_img_obs[0], 'data/cropped_img_obs_example.png')
+    save_image(cropped_img_obs[0], 'cropped_img_obs_example.png')
 
     cropped_img_obs = rearrange(cropped_img_obs, '(b t) c h w -> b t h w c', b=num_trajs)
 
@@ -113,11 +119,13 @@ def crop(img_obs):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--transform', type=str, help='which transformation to apply')
+    parser.add_argument('--transform', type=str, help='which transformation to apply', 
+                        choices=['resize', 'flip', 'crop'], default='resize')
+    parser.add_argument('--data-dir', type=str, default='data_seg_img_obs_res_224/train')
     args = parser.parse_args()
 
     # Load the images
-    img_obs = np.load('data/data_img_obs_res_224_30k/train/traj_img_obs_sample.npy')
+    img_obs = np.load(f'{args.data_dir}/traj_img_obs.npy')
     
     transfrom_funcs = {
         'resize': resize,
@@ -129,8 +137,8 @@ if __name__ == '__main__':
     transformed_img_obs = transfrom_funcs[args.transform](img_obs)
 
     # Save the resized images
-    save_dir = 'data/data_img_obs_res_224_30k/train'
+    save_dir = args.data_dir
     os.makedirs(save_dir, exist_ok=True)
-    np.save(f'{save_dir}/traj_img_obs_sample.npy', transformed_img_obs.numpy())
+    np.save(f'{save_dir}/traj_img_obs.npy', transformed_img_obs.numpy())
 
 

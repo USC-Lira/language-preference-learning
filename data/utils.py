@@ -89,7 +89,7 @@ def calc_and_set_global_vars(trajs):
 
 # NOTE: For this function, we produce commands that would change traj1 to traj2.
 def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, augmented_comps=None, validation=False,
-                                            split='train', sample_comps_train=1):
+                                            split='train', sample_comps_train=5):
     horizon = len(traj1)
 
     value_func = {
@@ -144,9 +144,9 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
                 if split == 'train':
                     num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
                     # randomly sample N commands from the augmented commands
-                    comps_idx = np.random.choice(num_comps_train, sample_comps_train, replace=False)
-                    # new_comps = augmented_comps[comp][comps_idx]
-                    new_comps = [augmented_comps[comp][idx] for idx in comps_idx]
+                    # comps_idx = np.random.choice(num_comps_train, sample_comps_train, replace=False)
+                    # new_comps = [augmented_comps[comp][idx] for idx in comps_idx]
+                    new_comps = augmented_comps[comp][:num_comps_train]
                 elif split == 'val':
                     num_comps_train = int(np.floor(len(augmented_comps[comp]) * 0.8))
                     num_comps = int(np.floor(len(augmented_comps[comp]) * 0.1))
@@ -160,103 +160,6 @@ def generate_synthetic_comparisons_commands(traj1, traj2, feature_name=None, aug
                 commands.extend(new_comps)
 
     return commands
-    # if feature_name == "gt_reward":
-    #     traj1_feature_values = [gt_reward(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [gt_reward(traj2[t]) for t in range(horizon)]
-    #
-    #     if np.mean(traj1_feature_values) < np.mean(traj2_feature_values):  # Here, we take the MEAN gt_reward
-    #         ori_comps = ["Lift the cube " + w + "." for w in greater_gtreward_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #     else:
-    #         ori_comps = ["Lift the cube " + w + "." for w in less_gtreward_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #
-    # elif feature_name == "speed":
-    #     traj1_feature_values = [speed(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [speed(traj2[t]) for t in range(horizon)]
-    #
-    #     if np.mean(traj1_feature_values) < np.mean(traj2_feature_values):  # Here, we take the MEAN speed
-    #         ori_comps = ["Move " + w + "." for w in greater_speed_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #     else:
-    #         ori_comps = ["Move " + w + "." for w in less_speed_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #
-    # elif feature_name == "height":
-    #     traj1_feature_values = [height(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [height(traj2[t]) for t in range(horizon)]
-    #
-    #     if np.mean(traj1_feature_values) < np.mean(traj2_feature_values):  # Here, we take the MEAN height
-    #         ori_comps = ["Move " + w + "." for w in greater_height_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #     else:
-    #         ori_comps = ["Move " + w + "." for w in less_height_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #
-    # elif feature_name == "distance_to_bottle":
-    #     traj1_feature_values = [distance_to_bottle(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [distance_to_bottle(traj2[t]) for t in range(horizon)]
-    #
-    #     # TODO: Later, we can make this non-Markovian (e.g., the MINIMUM distance)
-    #     if np.mean(traj1_feature_values) < np.mean(traj2_feature_values):  # Here, we take the MEAN distance
-    #         ori_comps = ["Move " + w + " from the bottle." for w in greater_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #     else:
-    #         # Move further from the bottle.
-    #         ori_comps = ["Move " + w + " to the bottle." for w in less_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #
-    # elif feature_name == "distance_to_cube":
-    #     traj1_feature_values = [distance_to_cube(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [distance_to_cube(traj2[t]) for t in range(horizon)]
-    #
-    #     # TODO: Later, we can make this non-Markovian (e.g., the FINAL distance)
-    #     if np.mean(traj1_feature_values) < np.mean(traj2_feature_values):  # Here, we take the MEAN distance
-    #         ori_comps = ["Move " + w + " from the cube." for w in greater_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
-    #     else:
-    #         ori_comps = ["Move " + w + " to the cube." for w in less_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #         return commands
 
 
 # NOTE: For this function, we produce commands that would change traj1 to traj2.
@@ -350,132 +253,6 @@ def generate_noisy_augmented_synthetic_comparisons_commands(traj1, traj2, n_dupl
         total_commands.extend(commands)
 
     return total_commands
-
-    # if feature_name == "gt_reward":
-    #     traj1_feature_values = [gt_reward(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [gt_reward(traj2[t]) for t in range(horizon)]
-    #
-    #     feature_diff = np.mean(traj2_feature_values) - np.mean(traj1_feature_values)
-    #     greater_prob = 1 / (1 + np.exp(-feature_diff / GT_REWARD_STD))
-    #     num_greater = int(np.around(n_duplicates * greater_prob))
-    #     num_lesser = n_duplicates - num_greater
-    #
-    #     commands = []
-    #     for i in range(num_greater):
-    #         ori_comps = ["Lift the cube " + w + "." for w in greater_gtreward_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #
-    #     for i in range(num_lesser):
-    #         ori_comps = ["Lift the cube " + w + "." for w in less_gtreward_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #
-    #     return commands
-    #
-    # elif feature_name == "speed":
-    #     traj1_feature_values = [speed(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [speed(traj2[t]) for t in range(horizon)]
-    #
-    #     feature_diff = np.mean(traj2_feature_values) - np.mean(traj1_feature_values)
-    #     greater_prob = 1 / (1 + np.exp(-feature_diff / SPEED_STD))
-    #     num_greater = int(np.around(n_duplicates * greater_prob))
-    #     num_lesser = n_duplicates - num_greater
-    #
-    #     commands = []
-    #     for i in range(num_greater):
-    #         ori_comps = ["Move " + w + "." for w in greater_speed_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #     for i in range(num_lesser):
-    #         ori_comps = ["Move " + w + "." for w in less_speed_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #
-    #     return commands
-    #
-    # elif feature_name == "height":
-    #     traj1_feature_values = [height(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [height(traj2[t]) for t in range(horizon)]
-    #
-    #     feature_diff = np.mean(traj2_feature_values) - np.mean(traj1_feature_values)
-    #     greater_prob = 1 / (1 + np.exp(-feature_diff / HEIGHT_STD))
-    #     num_greater = int(np.around(n_duplicates * greater_prob))
-    #     num_lesser = n_duplicates - num_greater
-    #
-    #     commands = []
-    #     for i in range(num_greater):
-    #         ori_comps = ["Move " + w + "." for w in greater_height_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #     for i in range(num_lesser):
-    #         ori_comps = ["Move " + w + "." for w in less_height_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #
-    #     return commands
-    #
-    # elif feature_name == "distance_to_bottle":
-    #     traj1_feature_values = [distance_to_bottle(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [distance_to_bottle(traj2[t]) for t in range(horizon)]
-    #
-    #     feature_diff = np.mean(traj2_feature_values) - np.mean(traj1_feature_values)
-    #     greater_prob = 1 / (1 + np.exp(-feature_diff / DISTANCE_TO_BOTTLE_STD))
-    #     num_greater = int(np.around(n_duplicates * greater_prob))
-    #     num_lesser = n_duplicates - num_greater
-    #
-    #     commands = []
-    #     for i in range(num_greater):
-    #         ori_comps = ["Move " + w + " from the bottle." for w in greater_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #     for i in range(num_lesser):
-    #         ori_comps = ["Move " + w + " to the bottle." for w in less_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #
-    #     return commands
-    #
-    # elif feature_name == "distance_to_cube":
-    #     traj1_feature_values = [distance_to_cube(traj1[t]) for t in range(horizon)]
-    #     traj2_feature_values = [distance_to_cube(traj2[t]) for t in range(horizon)]
-    #
-    #     feature_diff = np.mean(traj2_feature_values) - np.mean(traj1_feature_values)
-    #     greater_prob = 1 / (1 + np.exp(-feature_diff / DISTANCE_TO_CUBE_STD))
-    #     num_greater = int(np.around(n_duplicates * greater_prob))
-    #     num_lesser = n_duplicates - num_greater
-    #
-    #     commands = []
-    #     for i in range(num_greater):
-    #         ori_comps = ["Move " + w + " from the cube." for w in greater_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #     for i in range(num_lesser):
-    #         ori_comps = ["Move " + w + " to the cube." for w in less_distance_adjs]
-    #         commands.extend(ori_comps)
-    #         if augmented_comps is not None:
-    #             for comp in ori_comps:
-    #                 commands.extend(augmented_comps[comp])
-    #
-    #     return commands
 
 
 OBSERVATION_DIM = 65
