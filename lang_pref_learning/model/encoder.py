@@ -70,7 +70,7 @@ class NLTrajAutoencoder(nn.Module):
             else:
                 self.traj_encoder = CNNEncoder(
                     in_channels=3 if not use_stack_img_obs else 3 * n_frames,
-                    action_dim=ACTION_DIM,
+                    state_dim=PROPRIO_STATE_DIM + ACTION_DIM,
                     hidden_dim=encoder_hidden_dim,
                     output_dim=feature_dim,
                 )
@@ -113,7 +113,7 @@ class NLTrajAutoencoder(nn.Module):
 
     # Input is a tuple with (trajectory_a, trajectory_b, language)
     # traj_a has shape (n_trajs, n_timesteps, state+action)
-    def forward(self, inputs):
+    def forward(self, inputs, train=False):
         # NOTE: traj_a is the reference, traj_b is the updated
         traj_a = inputs["traj_a"]
         traj_b = inputs["traj_b"]
@@ -130,8 +130,8 @@ class NLTrajAutoencoder(nn.Module):
                 "img_obs": inputs["img_obs_b"],
                 "actions": inputs["actions_b"],
             }
-            encoded_traj_a = self.traj_encoder(inputs_a)
-            encoded_traj_b = self.traj_encoder(inputs_b)
+            encoded_traj_a = self.traj_encoder(inputs_a, train=train)
+            encoded_traj_b = self.traj_encoder(inputs_b, train=train)
         else:
             encoded_traj_a = self.traj_encoder(traj_a)
             encoded_traj_b = self.traj_encoder(traj_b)

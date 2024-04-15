@@ -102,7 +102,7 @@ def evaluate(model, data_loader, device):
 
             curr_t = time.time()
 
-            pred = model(data)
+            pred = model(data, train=False)
             (
                 encoded_traj_a,
                 encoded_traj_b,
@@ -180,7 +180,7 @@ def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_schedul
             optimizer.zero_grad()
 
             # compute reconstructions
-            output = model(train_data)
+            output = model(train_data, train=True)
             (
                 encoded_traj_a,
                 encoded_traj_b,
