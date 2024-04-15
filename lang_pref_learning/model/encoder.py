@@ -62,9 +62,9 @@ class NLTrajAutoencoder(nn.Module):
         elif traj_encoder == "cnn":
             if use_visual_features:
                 self.traj_encoder = VisualMLP(
-                    in_feature_dim=visual_feature_dim // n_frames if use_stack_img_obs else visual_feature_dim,
-                    action_dim=ACTION_DIM,
-                    hidden_dim=encoder_hidden_dim,
+                    visual_feature_dim=visual_feature_dim,
+                    state_dim=PROPRIO_STATE_DIM + ACTION_DIM, 
+                    hidden_dim=encoder_hidden_dim, 
                     out_dim=feature_dim,
                 )
             else:
@@ -141,9 +141,8 @@ class NLTrajAutoencoder(nn.Module):
             encoded_traj_b = encoded_traj_b
         elif self.traj_encoder_cls == "mlp" or self.traj_encoder_cls == "cnn":
             # Take the mean over timesteps
-            if not self.use_visual_features:
-                encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
-                encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
+            encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
+            encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
         elif self.traj_encoder_cls == 'visual-transformer':
             encoded_traj_a = encoded_traj_a.mean(dim=-2)
             encoded_traj_b = encoded_traj_b.mean(dim=-2)

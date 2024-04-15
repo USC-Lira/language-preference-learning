@@ -151,6 +151,15 @@ def generate_and_save_dataset(trajs, output_dir, noise_augmentation=0, id_mappin
         json.dump(unique_comps, f)
 
 
+def truncate_traj(traj, traj_img_obs, max_len=1000):
+    """Truncate the trajectory to the minimum length of the two observations."""
+    num_seq_max = min(len(traj), len(traj_img_obs), max_len)
+    traj = traj[:num_seq_max]
+    traj_img_obs = traj_img_obs[:num_seq_max]
+    return traj, traj_img_obs
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
 
@@ -175,52 +184,67 @@ if __name__ == '__main__':
     val_split = args.val_split
     seed = args.seed
     use_img_obs = args.use_img_obs
-    
+
 
     np.random.seed(seed)
 
     data_dir = args.data_dir
-    train_trajectories = np.load(os.path.join(data_dir, 'train/trajs.npy'))
-    val_trajectories = np.load(os.path.join(data_dir, 'val/trajs.npy'))
-
-    total_num_trajs = len(train_trajectories) + len(val_trajectories)
+    train_traj = np.load(os.path.join(data_dir, 'train/trajs.npy'))
+    val_traj = np.load(os.path.join(data_dir, 'val/trajs.npy'))
 
     if use_img_obs:
-        train_traj_img_obs = np.load(os.path.join(data_dir, 'train/traj_img_observations.npy'))
-        val_traj_img_obs = np.load(os.path.join(data_dir, 'val/traj_img_observations.npy'))
+        train_traj_img_obs = np.load(os.path.join(data_dir, 'train/traj_img_obs.npy'))
+        val_traj_img_obs = np.load(os.path.join(data_dir, 'val/traj_img_obs.npy'))
         train_actions = np.load(os.path.join(data_dir, 'train/actions.npy'))
         val_actions = np.load(os.path.join(data_dir, 'val/actions.npy'))
 
-    # Further split train into train and val, and let current val be test.
-    test_trajectories = val_trajectories
-    if use_img_obs:
-        test_traj_img_obs = val_traj_img_obs
-        test_actions = val_actions
+        train_traj, train_traj_img_obs = truncate_traj(train_traj, train_traj_img_obs)
+        val_traj, val_traj_img_obs = truncate_traj(val_traj, val_traj_img_obs, 
+                                                   max_len=20)
 
-    split_i = int(val_split * total_num_trajs)
-    train_trajectories, val_trajectories = train_trajectories[split_i:], train_trajectories[:split_i]
-    print("Number of train trajectories:", len(train_trajectories))
-    print("Number of val trajectories:", len(val_trajectories))
+    if os.path.exists(os.path.join(data_dir, 'test/trajs.npy')):
+        test_exists = True
+        test_trajectories = np.load(os.path.join(data_dir, 'test/trajs.npy'))
+        test_traj_img_obs = np.load(os.path.join(data_dir, 'test/traj_img_obs.npy'))
+        test_actions = np.load(os.path.join(data_dir, 'test/actions.npy'))
+
+        test_trajectories, test_traj_img_obs = truncate_traj(test_trajectories, test_traj_img_obs, 
+                                                             max_len=20)
+
+    else:
+        test_exists = False
+        # Further split train into train and val, and let current val be test.
+        total_num_trajs = len(train_traj) + len(val_traj)
+        test_trajectories = val_traj
+            
+        split_i = int(val_split * total_num_trajs)
+        train_traj, val_traj = train_traj[split_i:], train_traj[:split_i]
+
+        if use_img_obs:
+            test_traj_img_obs = val_traj_img_obs
+            test_actions = val_actions
+
+            train_traj_img_obs, val_traj_img_obs = train_traj_img_obs[split_i:], train_traj_img_obs[:split_i]
+            train_actions, val_actions = train_actions[split_i:], train_actions[:split_i]
+
+    print("Number of train trajectories:", len(train_traj))
+    print("Number of val trajectories:", len(val_traj))
     print("Number of test trajectories:", len(test_trajectories))
-    
-    if use_img_obs:
-        train_traj_img_obs, val_traj_img_obs = train_traj_img_obs[split_i:], train_traj_img_obs[:split_i]
-        train_actions, val_actions = train_actions[split_i:], train_actions[:split_i]
+
 
     if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-
-    generate_and_save_dataset(train_trajectories, os.path.join(output_dir, 'train'),
+        os.makedirs(output_dir, exist_ok=True)
+    generate_and_save_dataset(train_traj, os.path.join(output_dir, 'train'),
                               noise_augmentation=noise_augmentation, dataset_size=dataset_size,
                               all_pairs=args.all_pairs, split='train', id_mapping=args.id_mapping, lang_aug=True)
 
-    generate_and_save_dataset(val_trajectories, os.path.join(output_dir, 'val'), split='val',
+    generate_and_save_dataset(val_traj, os.path.join(output_dir, 'val'), split='val',
                               all_pairs=True, id_mapping=args.id_mapping, lang_aug=True)
 
     generate_and_save_dataset(test_trajectories, os.path.join(output_dir, 'test'), split='test',
                               all_pairs=True, id_mapping=args.id_mapping, lang_aug=True)
     
-    if use_img_obs:
+    if use_img_obs and not test_exists:
         # Save the image observations and actions
         np.save(os.path.join(output_dir, 'train/traj_img_obs.npy'), train_traj_img_obs)
         np.save(os.path.join(output_dir, 'val/traj_img_obs.npy'), val_traj_img_obs)
