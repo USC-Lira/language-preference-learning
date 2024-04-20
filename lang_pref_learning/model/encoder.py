@@ -2,11 +2,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from lang_pref_learning.model.transformer import TransformerEncoder
 from lang_pref_learning.model.lstm import LSTMEncoder
 from lang_pref_learning.model.cnn import CNNEncoder
 from lang_pref_learning.model.visual_mlp import VisualMLP
-from lang_pref_learning.model.visual_transformer import ImageTrajectoryTransformer
 from data.utils import OBJECT_STATE_DIM, PROPRIO_STATE_DIM
 
 STATE_DIM = 65
@@ -38,7 +36,7 @@ class NLTrajAutoencoder(nn.Module):
         encoder_hidden_dim=128,
         feature_dim=256,
         decoder_hidden_dim=128,
-        bert_output_dim=768,
+        lang_embed_dim=768,
         lang_encoder=None,
         preprocessed_nlcomps=False,
         use_bert_encoder=False,
@@ -81,14 +79,6 @@ class NLTrajAutoencoder(nn.Module):
                 hidden_dim=encoder_hidden_dim,
                 output_dim=feature_dim,
             )
-        elif traj_encoder == 'visual-transformer':
-            self.traj_encoder = ImageTrajectoryTransformer(
-                feature_dim=visual_feature_dim,
-                d_model=feature_dim,
-                n_head=4,
-                n_layers=2,
-                dropout=0.1
-            )
         else:
             raise ValueError(f"Trajectory encoder {traj_encoder} not found")
 
@@ -106,7 +96,7 @@ class NLTrajAutoencoder(nn.Module):
             self.lang_encoder = lang_encoder
         else:
             self.lang_encoder = nn.Sequential(
-                nn.Linear(in_features=bert_output_dim, out_features=encoder_hidden_dim),
+                nn.Linear(in_features=lang_embed_dim, out_features=encoder_hidden_dim),
                 nn.ReLU(),
                 nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
             )
@@ -139,13 +129,12 @@ class NLTrajAutoencoder(nn.Module):
         if self.traj_encoder_cls == "lstm":
             encoded_traj_a = encoded_traj_a
             encoded_traj_b = encoded_traj_b
+
         elif self.traj_encoder_cls == "mlp" or self.traj_encoder_cls == "cnn":
             # Take the mean over timesteps
             encoded_traj_a = torch.mean(encoded_traj_a, dim=-2)
             encoded_traj_b = torch.mean(encoded_traj_b, dim=-2)
-        elif self.traj_encoder_cls == 'visual-transformer':
-            encoded_traj_a = encoded_traj_a.mean(dim=-2)
-            encoded_traj_b = encoded_traj_b.mean(dim=-2)
+
         else:
             raise ValueError(f"Trajectory encoder {self.traj_encoder} not found")
 

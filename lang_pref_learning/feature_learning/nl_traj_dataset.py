@@ -72,36 +72,41 @@ class NLTrajComparisonDataset(Dataset):
             ), "Must provide tokenizer if not using preprocessed_nlcomps."
             self.tokenizer = tokenizer
             with open(unique_nlcomp_file, "rb") as f:
-                nlcomps = json.load(f)
+                unique_nlcomps = json.load(f)
             self.unique_nlcomps_tokens = []
             self.unique_nlcomps_attention_masks = []
-            for nlcomp in nlcomps:
-                tokens = self.tokenizer.tokenize(
-                    self.tokenizer.cls_token + " " + nlcomp + " " + self.tokenizer.sep_token
-                )
-                token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+            # for nlcomp in unique_nlcomps:
+            #     tokens = self.tokenizer.tokenize(
+            #         self.tokenizer.cls_token + " " + nlcomp + " " + self.tokenizer.sep_token
+            #     )
+            #     token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
-                # Pad sequences to the common length
-                padding_length = self.max_len - len(token_ids)
+            #     # Pad sequences to the common length
+            #     padding_length = self.max_len - len(token_ids)
 
-                # Create attention mask
-                attention_mask = [1] * len(token_ids) + [0] * padding_length
-                token_ids += [self.tokenizer.pad_token_id] * padding_length
+            #     # Create attention mask
+            #     attention_mask = [1] * len(token_ids) + [0] * padding_length
+            #     token_ids += [self.tokenizer.pad_token_id] * padding_length
 
-                self.unique_nlcomps_tokens.append(token_ids)
-                self.unique_nlcomps_attention_masks.append(attention_mask)
+            #     self.unique_nlcomps_tokens.append(token_ids)
+            #     self.unique_nlcomps_attention_masks.append(attention_mask)
 
             self.unique_nlcomps_tokens = np.array(self.unique_nlcomps_tokens)
             self.unique_nlcomps_attention_masks = np.array(self.unique_nlcomps_attention_masks)
 
-        # transform to torch tensors and move to device
+            tokens, attention_masks = self.tokenizer(
+                unique_nlcomps,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+            )
+            self.unique_nlcomps_tokens = tokens
+            self.unique_nlcomps_attention_masks = attention_masks
+
+        # move to device
         self.trajs = torch.tensor(self.trajs, dtype=torch.float32).to(device)
-        self.unique_nlcomps_tokens = torch.tensor(self.unique_nlcomps_tokens, dtype=torch.long).to(
-            device
-        )
-        self.unique_nlcomps_attention_masks = torch.tensor(
-            self.unique_nlcomps_attention_masks, dtype=torch.long
-        ).to(device)
+        self.unique_nlcomps_tokens = self.unique_nlcomps_tokens.to(device)
+        self.unique_nlcomps_attention_masks = self.unique_nlcomps_attention_masks.to(device)
 
         if self.use_img_obs:
             self.img_observations = torch.tensor(self.img_observations, dtype=torch.float32).to(

@@ -5,12 +5,12 @@ import torch
 import argparse
 import os
 
-from lang_pref_learning.feature_learning.utils import BERT_MODEL_NAME
+from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME
 
 os.environ["OMP_NUM_THREADS"] = "4"
 
 
-def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=False, save=False):
+def preprocess_strings(nlcomp_dir, LANG_MODEL, nlcomp_list=None, id_mapping=False, save=False):
     if nlcomp_list is None:
         assert nlcomp_dir != ''
         # nlcomp_file is a json file with the list of comparisons in NL.
@@ -37,28 +37,28 @@ def preprocess_strings(nlcomp_dir, bert_model, nlcomp_list=None, id_mapping=Fals
     unbatched_input = unique_nlcomps
 
     # Get BERT embeddings
-    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[bert_model])
-    model = AutoModel.from_pretrained(BERT_MODEL_NAME[bert_model])
-    bert_output_embeddings = []
+    tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[LANG_MODEL])
+    model = AutoModel.from_pretrained(LANG_MODEL_NAME[LANG_MODEL])
+    lang_embeddings = []
     for sentence in unbatched_input:
         inputs = tokenizer(sentence, return_tensors="pt")
-        bert_output = model(**inputs)
-        embedding = bert_output.last_hidden_state
+        outputs = model(**inputs)
+        embedding = outputs.last_hidden_state
 
         # Average across the sequence to get a sentence-level embedding
         embedding = torch.mean(embedding, dim=1, keepdim=False)
-        bert_output_embeddings.append(embedding.detach().numpy())
+        lang_embeddings.append(embedding.detach().numpy())
 
     if id_mapping:
-        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(bert_model))
+        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(LANG_MODEL))
     else:
         outfile = os.path.join(nlcomp_dir, 'nlcomps.npy')
 
-    bert_output_embeddings = np.concatenate(bert_output_embeddings, axis=0)
-    print(bert_output_embeddings.shape)
+    lang_embeddings = np.concatenate(lang_embeddings, axis=0)
+    print(lang_embeddings.shape)
     if save:
-        np.save(outfile, bert_output_embeddings)
-    return bert_output_embeddings
+        np.save(outfile, lang_embeddings)
+    return lang_embeddings
 
 
 if __name__ == '__main__':
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--data-dir', type=str, default='', help='')
     parser.add_argument('--batch-size', type=int, default=5000, help='')
     parser.add_argument('--id-mapping', action="store_true", help='')
-    parser.add_argument('--bert-model', default='bert-base', help='Which BERT model to use')
+    parser.add_argument('--lang-model', default='bert-base', help='Which BERT model to use')
 
     args = parser.parse_args()
-    preprocess_strings(args.data_dir, args.bert_model, id_mapping=args.id_mapping, save=True)
+    preprocess_strings(args.data_dir, args.LANG_MODEL, id_mapping=args.id_mapping, save=True)

@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 from tqdm import tqdm
 import time
 
@@ -14,8 +14,8 @@ from lang_pref_learning.feature_learning.nl_traj_dataset import NLTrajComparison
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.feature_learning.utils import (
     timeStamped,
-    BERT_MODEL_NAME,
-    BERT_OUTPUT_DIM,
+    LANG_MODEL_NAME,
+    LANG_OUTPUT_DIM,
     create_logger,
     AverageMeter,
 )
@@ -34,7 +34,7 @@ def load_data(args, split="train"):
     # If we don't use bert in the language encoder, then we need to load the preprocessed nlcomps.
     if not args.use_bert_encoder:
         unique_nlcomp_file = os.path.join(
-            args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.bert_model)
+            args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.lang_model)
         )
     else:
         unique_nlcomp_file = os.path.join(
@@ -285,9 +285,13 @@ def train(logger, args):
     # Load model to the specified device, either gpu or cpu
     logger.info("Initializing model and loading to device...")
     if args.use_bert_encoder:
-        lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        feature_dim = BERT_OUTPUT_DIM[args.bert_model]
+        if 't5' in args.lang_model:
+            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
+        else:
+            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+
+        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
     else:
         lang_encoder = None
         tokenizer = None
@@ -299,7 +303,7 @@ def train(logger, args):
         decoder_hidden_dim=args.decoder_hidden_dim,
         lang_encoder=lang_encoder,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
-        bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
+        lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
         use_bert_encoder=args.use_bert_encoder,
         traj_encoder=args.traj_encoder,
         use_stack_img_obs=args.use_stack_img_obs,
@@ -576,7 +580,9 @@ if __name__ == "__main__":
         help="where to save the model",
     )
     parser.add_argument(
-        "--bert-model", type=str, default="bert-base", help="which BERT model to use"
+        "--lang-model", type=str, default="bert-base", 
+        choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
+        help="which language model to use"
     )
     parser.add_argument(
         "--use-bert-encoder",

@@ -2,16 +2,25 @@ import os
 import datetime
 import logging
 
-BERT_MODEL_NAME = {
+LANG_MODEL_NAME = {
+    # BERT models
     'bert-base': 'google/bert_uncased_L-12_H-768_A-12',
     'bert-mini': 'google/bert_uncased_L-4_H-256_A-4',
-    'bert-tiny': 'google/bert_uncased_L-4_H-128_A-2'
+    'bert-tiny': 'google/bert_uncased_L-4_H-128_A-2',
+
+    # T5 models
+    't5-small': 'google/t5-small',
+    't5-base': 'google/t5-base',
+
 }
 
-BERT_OUTPUT_DIM = {
+LANG_OUTPUT_DIM = {
     'bert-base': 768,
     'bert-mini': 256,
-    'bert-tiny': 128
+    'bert-tiny': 128,
+
+    't5-small': 512,
+    't5-base': 768,
 }
 
 
