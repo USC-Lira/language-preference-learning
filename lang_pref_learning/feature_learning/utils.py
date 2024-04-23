@@ -9,8 +9,8 @@ LANG_MODEL_NAME = {
     'bert-tiny': 'google/bert_uncased_L-4_H-128_A-2',
 
     # T5 models
-    't5-small': 'google/t5-small',
-    't5-base': 'google/t5-base',
+    't5-small': 'google-t5/t5-small',
+    't5-base': 'google-t5/t5-base',
 
 }
 
