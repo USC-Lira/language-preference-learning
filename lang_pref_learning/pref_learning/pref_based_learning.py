@@ -11,26 +11,27 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
-from feature_learning.model import NLTrajAutoencoder
-from pref_learning.pref_dataset import PrefDataset, EvalDataset
-from pref_learning.utils import feature_aspects
-from feature_learning.utils import BERT_MODEL_NAME, BERT_OUTPUT_DIM, AverageMeter
-from model_analysis.utils import get_traj_lang_embeds
-from model_analysis.improve_trajectory import (
+from lang_pref_learning.model.encoder import NLTrajAutoencoder
+from lang_pref_learning.pref_learning.pref_dataset import PrefDataset, EvalDataset
+from lang_pref_learning.pref_learning.utils import feature_aspects
+from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
+from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds
+from lang_pref_learning.model_analysis.improve_trajectory import (
     initialize_reward,
     get_feature_value,
     get_lang_feedback,
 )
 
+os.environ['CURL_CA_BUNDLE'] = ''
 
 # learned and true reward func (linear for now)
 def init_weights_with_norm_one(m):
     if isinstance(m, nn.Linear):  # Check if the module is a linear layer
         weight_shape = m.weight.size()
         # Initialize weights with a standard method
-        weights = torch.normal(mean=0, std=0.01, size=weight_shape)
+        weights = torch.normal(mean=0, std=0.0002, size=weight_shape)
         # Normalize weights to have a norm of 1
         # weights /= weights.norm(2)  # Adjust this if you need a different norm
         m.weight.data = weights
@@ -83,21 +84,29 @@ def get_lang_feedback_aspect(curr_feature, reward, optimal_traj_feature, noisy=F
     return feature_idx, pos
 
 
-def load_data(args, test=False, DEBUG=False):
+def load_data(args, split='train', DEBUG=False):
     # Load the test trajectories and language comparisons
-    if not test:
-        trajs = np.load(f"{args.data_dir}/train/trajs.npy")
-        nlcomps = json.load(open(f"{args.data_dir}/train/unique_nlcomps.json", "rb"))
-        nlcomp_embeds = np.load(f"{args.data_dir}/train/unique_nlcomps_{args.bert_model}.npy")
-    else:
-        trajs = np.load(f"{args.data_dir}/val/trajs.npy")
-        nlcomps = json.load(open(f"{args.data_dir}/val/unique_nlcomps.json", "rb"))
-        nlcomp_embeds = np.load(f"{args.data_dir}/val/unique_nlcomps_{args.bert_model}.npy")
+    trajs = np.load(f"{args.data_dir}/{split}/trajs.npy")
+    nlcomps = json.load(open(f"{args.data_dir}/{split}/unique_nlcomps.json", "rb"))
+
+    nlcomp_embeds = None
+    traj_img_obs = None
+    actions = None
+
+    if not args.use_bert_encoder:
+        nlcomp_embeds = np.load(f"{args.data_dir}/{split}/unique_nlcomps_{args.lang_model}.npy")
+
+    if args.use_img_obs:
+        traj_img_obs = np.load(f"{args.data_dir}/{split}/traj_img_obs.npy")
+        actions = np.load(f"{args.data_dir}/{split}/actions.npy")
+        trajs = trajs[:, ::10, :]
+        traj_img_obs = traj_img_obs[:, ::10, :]
+        actions = actions[:, ::10, :]
 
     if DEBUG:
         print("len of trajs: " + str(len(trajs)))
 
-    # need to run categorize.py first
+    # need to run categorize.py first to get these files
     greater_nlcomps = json.load(open(f"{args.data_dir}/train/greater_nlcomps.json", "rb"))
     less_nlcomps = json.load(open(f"{args.data_dir}/train/less_nlcomps.json", "rb"))
     classified_nlcomps = json.load(open(f"{args.data_dir}/train/classified_nlcomps.json", "rb"))
@@ -112,6 +121,8 @@ def load_data(args, test=False, DEBUG=False):
         "greater_nlcomps": greater_nlcomps,
         "less_nlcomps": less_nlcomps,
         "classified_nlcomps": classified_nlcomps,
+        'traj_img_obs': traj_img_obs,
+        'actions': actions
     }
 
     return data
@@ -363,8 +374,10 @@ def run(args):
     true_reward = np.load(f"{args.true_reward_dir}/true_rewards.npy")
 
     # Load train data
-    train_data_dict = load_data(args)
+    # TODO: change it back to train
+    train_data_dict = load_data(args, split='train')
     train_trajs = train_data_dict["trajs"]
+    train_img_obs, train_actions = train_data_dict["traj_img_obs"], train_data_dict["actions"]
     train_nlcomps, train_nlcomps_embed = (
         train_data_dict["nlcomps"],
         train_data_dict["nlcomp_embeds"],
@@ -378,8 +391,9 @@ def run(args):
     train_feature_values = np.array([get_feature_value(traj) for traj in train_trajs])
 
     # Load test data
-    test_data_dict = load_data(args, test=True)
+    test_data_dict = load_data(args, split='test')
     test_trajs = test_data_dict["trajs"]
+    test_img_obs, test_actions = test_data_dict["traj_img_obs"], test_data_dict["actions"]
     test_nlcomps, test_nlcomps_embed = (
         test_data_dict["nlcomps"],
         test_data_dict["nlcomp_embeds"],
@@ -411,9 +425,13 @@ def run(args):
     # Current learned language encoder
     # Load the model
     if args.use_bert_encoder:
-        lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        feature_dim = BERT_OUTPUT_DIM[args.bert_model]
+        if 't5' in args.lang_model:
+            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
+        else:
+            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+
+        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
     else:
         lang_encoder = None
         tokenizer = None
@@ -426,7 +444,7 @@ def run(args):
         decoder_hidden_dim=args.decoder_hidden_dim,
         lang_encoder=lang_encoder,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
-        bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
+        lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
         use_bert_encoder=args.use_bert_encoder,
         traj_encoder=args.traj_encoder,
     )
@@ -445,24 +463,46 @@ def run(args):
     model.to(device)
     model.eval()
 
-    train_traj_embeds, train_lang_embeds = get_traj_lang_embeds(
-        train_trajs,
-        train_nlcomps,
-        model,
-        device,
-        args.use_bert_encoder,
-        tokenizer,
-        nlcomps_bert_embeds=train_nlcomps_embed,
-    )
-    test_traj_embeds, test_lang_embeds = get_traj_lang_embeds(
-        test_trajs,
-        test_nlcomps,
-        model,
-        device,
-        args.use_bert_encoder,
-        tokenizer,
-        nlcomps_bert_embeds=test_nlcomps_embed,
-    )
+    # Check if the embeddings are already computed
+    # If not, compute the embeddings
+    if not os.path.exists(f"{args.data_dir}/train/traj_embeds.npy"):
+        train_traj_embeds, train_lang_embeds = get_traj_lang_embeds(
+            train_trajs,
+            train_nlcomps,
+            model,
+            device,
+            args.use_bert_encoder,
+            tokenizer,
+            nlcomps_bert_embeds=train_nlcomps_embed,
+            use_img_obs=args.use_img_obs,
+            img_obs=train_img_obs,
+            actions=train_actions
+            
+        )
+        test_traj_embeds, test_lang_embeds = get_traj_lang_embeds(
+            test_trajs,
+            test_nlcomps,
+            model,
+            device,
+            args.use_bert_encoder,
+            tokenizer,
+            nlcomps_bert_embeds=test_nlcomps_embed,
+            use_img_obs=args.use_img_obs,
+            img_obs=test_img_obs,
+            actions=test_actions
+        )
+
+        # Save the embeddings
+        np.save(f"{args.data_dir}/train/traj_embeds.npy", train_traj_embeds)
+        np.save(f"{args.data_dir}/train/lang_embeds.npy", train_lang_embeds)
+        np.save(f"{args.data_dir}/test/traj_embeds.npy", test_traj_embeds)
+        np.save(f"{args.data_dir}/test/lang_embeds.npy", test_lang_embeds)
+    
+    else:
+        train_traj_embeds = np.load(f"{args.data_dir}/train/traj_embeds.npy")
+        train_lang_embeds = np.load(f"{args.data_dir}/train/lang_embeds.npy")
+        test_traj_embeds = np.load(f"{args.data_dir}/test/traj_embeds.npy")
+        test_lang_embeds = np.load(f"{args.data_dir}/test/lang_embeds.npy")
 
     print("Mean Norm of Traj Embeds:", np.linalg.norm(train_traj_embeds, axis=1).mean())
     print("Mean Norm of Lang Embeds:", np.linalg.norm(train_lang_embeds, axis=1).mean())
@@ -590,16 +630,21 @@ if __name__ == "__main__":
     parser.add_argument("--encoder-hidden-dim", type=int, default=128)
     parser.add_argument("--decoder-hidden-dim", type=int, default=128)
     parser.add_argument("--preprocessed-nlcomps", action="store_true", help="")
-    parser.add_argument("--bert-model", type=str, default="bert-base", help="which BERT model to use")
+    parser.add_argument(
+        "--lang-model", type=str, default="t5-small", 
+        choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
+        help="which language model to use"
+    )
     parser.add_argument(
         "--use-bert-encoder",
         action="store_true",
         help="whether to use BERT in the language encoder",
     )
+    parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
     parser.add_argument(
         "--traj-encoder",
         default="mlp",
-        choices=["mlp", "transformer", "lstm"],
+        choices=["mlp", "transformer", "lstm", "cnn"],
         help="which trajectory encoder to use",
     )
     parser.add_argument("--weight-decay", type=float, default=0, help="")
