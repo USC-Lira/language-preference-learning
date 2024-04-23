@@ -3,3 +3,4 @@ data/*/
 exp/
 *.out
 *.pyc
+slurm-*.out
