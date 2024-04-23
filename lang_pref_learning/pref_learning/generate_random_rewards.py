@@ -1,3 +1,6 @@
+"""Generate True Rewards for the Preference Learning Task with Cross-Entropy Less than 0.4"""
+
+
 import numpy as np
 import argparse
 from torch.utils.data import DataLoader

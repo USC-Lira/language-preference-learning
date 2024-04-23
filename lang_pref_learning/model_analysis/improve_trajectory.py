@@ -4,13 +4,13 @@ import json
 import argparse
 import torch
 import os
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
-from feature_learning.utils import BERT_MODEL_NAME, BERT_OUTPUT_DIM
+from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from model_analysis.find_nearest_traj import get_nearest_embed_cosine
-from feature_learning.model import NLTrajAutoencoder
-from model_analysis.utils import get_traj_lang_embeds, get_lang_embed
+from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine
+from lang_pref_learning.model.encoder import NLTrajAutoencoder
+from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_lang_embed
 
 
 def initialize_reward(num_features):
@@ -117,6 +117,7 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
 
 def main(args):
     trajs = np.load(os.path.join(args.data_dir, 'test/trajs.npy'))
+    traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
     nlcomps = json.load(open(os.path.join(args.data_dir, 'test/unique_nlcomps.json'), 'rb'))
     nlcomps_bert_embeds = np.load(os.path.join(args.data_dir, f'test/unique_nlcomps_{args.bert_model}.npy'))
     greater_nlcomps = json.load(open(os.path.join(args.data_dir, '../greater_nlcomps.json'), 'rb'))
@@ -124,18 +125,22 @@ def main(args):
 
     # Load the model
     if args.use_bert_encoder:
-        lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        feature_dim = BERT_OUTPUT_DIM[args.bert_model]
+        if 't5' in args.lang_model:
+            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
+        else:
+            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+
+        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
     else:
-        lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[args.bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[args.bert_model])
+        lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.bert_model])
+        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.bert_model])
         feature_dim = 128
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=args.preprocessed_nlcomps,
-                              bert_output_dim=BERT_OUTPUT_DIM[args.bert_model],
+                              bert_output_dim=LANG_OUTPUT_DIM[args.bert_model],
                               use_bert_encoder=args.use_bert_encoder)
 
     state_dict = torch.load(os.path.join(args.model_dir, 'best_model_state_dict.pth'))

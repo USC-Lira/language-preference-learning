@@ -4,11 +4,12 @@ import torch
 import argparse
 import json
 
-from transformers import AutoModel, AutoTokenizer
-from feature_learning.utils import BERT_MODEL_NAME, BERT_OUTPUT_DIM
-from feature_learning.model import NLTrajAutoencoder
+from transformers import AutoModel, AutoTokenizer, T5EncoderModel
+
+from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
+from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from model_analysis.utils import get_traj_lang_embeds
+from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds
 
 
 def get_nearest_embed_distance(embed, lang_embed, embeds, index=None):
@@ -73,10 +74,14 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the model
-    if use_bert_encoder:
-        lang_encoder = AutoModel.from_pretrained(BERT_MODEL_NAME[bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME[bert_model])
-        feature_dim = BERT_OUTPUT_DIM[bert_model]
+    if args.use_bert_encoder:
+        if 't5' in args.lang_model:
+            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
+        else:
+            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+
+        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
     else:
         lang_encoder = None
         tokenizer = None
@@ -84,7 +89,7 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
 
     model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
-                              preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=BERT_OUTPUT_DIM[bert_model],
+                              preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=LANG_OUTPUT_DIM[bert_model],
                               use_bert_encoder=use_bert_encoder, traj_encoder=traj_encoder)
 
     state_dict = torch.load(os.path.join(model_dir, 'best_model_state_dict.pth'))
