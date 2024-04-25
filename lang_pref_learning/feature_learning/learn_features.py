@@ -163,6 +163,7 @@ def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_schedul
     ep_cosine_sim = AverageMeter("cosine_similarity")
     ep_norm_loss = AverageMeter("norm_loss")
     ep_train_acc = AverageMeter("accuracy")
+    ep_traj_reg_loss = AverageMeter("traj_reg_loss")
 
     logsigmoid = nn.LogSigmoid()
     if use_lr_scheduler:
@@ -218,16 +219,19 @@ def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_schedul
                 -1 * log_likelihood
             )  # Then convert the value to a loss.
 
-            # Norm loss, to make sure the encoded vectors are unit vectors
+            # Norm loss, to make sure the encoded lang vectors are unit vectors
             norm_loss = F.mse_loss(
                 torch.norm(encoded_lang, dim=-1),
                 torch.ones(encoded_lang.shape[0]).to(device),
             )
 
-            # norm loss
+            # Add L2 loss to the trajectory embeddings
+            traj_reg_loss = torch.norm(encoded_traj_a) + torch.norm(encoded_traj_b)
+
             # By now, train_loss is a scalar.
             # train_loss = reconstruction_loss + distance_loss
-            train_loss = reconstruction_loss + log_likelihood_loss
+            train_loss = reconstruction_loss + log_likelihood_loss + 0.0001 * traj_reg_loss
+
             if args.add_norm_loss:
                 train_loss += norm_loss
 
@@ -249,6 +253,7 @@ def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_schedul
             )
             ep_cosine_sim.update(cos_sim.item(), train_data["traj_a"].shape[0])
             ep_norm_loss.update(norm_loss.item(), train_data["traj_a"].shape[0])
+            ep_traj_reg_loss.update(traj_reg_loss.item(), train_data["traj_a"].shape[0])
             ep_train_acc.update(np.sum(dot_prod.detach().cpu().numpy() > 0) / len(dot_prod), 
                                 train_data["traj_a"].shape[0])
 
@@ -257,6 +262,7 @@ def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_schedul
                 "reconstruction_loss": ep_reconstruction_loss.avg,
                 "cosine_similarity": ep_cosine_sim.avg,
                 "norm_loss": ep_norm_loss.avg,
+                "traj_reg_loss": ep_traj_reg_loss.avg,
                 "accuracy": ep_train_acc.avg,
             }
 
