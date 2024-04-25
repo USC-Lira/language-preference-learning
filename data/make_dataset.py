@@ -4,7 +4,7 @@ import json
 import numpy as np
 import argparse
 import os
-from utils import generate_synthetic_comparisons_commands, generate_noisy_augmented_synthetic_comparisons_commands, \
+from data.utils import generate_synthetic_comparisons_commands, generate_noisy_augmented_synthetic_comparisons_commands, \
     calc_and_set_global_vars
 
 

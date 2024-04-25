@@ -5,29 +5,7 @@ import torch.nn as nn
 from lang_pref_learning.model.lstm import LSTMEncoder
 from lang_pref_learning.model.cnn import CNNEncoder
 from lang_pref_learning.model.visual_mlp import VisualMLP
-from data.utils import OBJECT_STATE_DIM, PROPRIO_STATE_DIM
-
-STATE_DIM = 65
-ACTION_DIM = 4  # NOTE: we use OSC_POSITION as our controller
-
-
-class NLTrajEncoder(nn.Module):
-    def __init__(
-        self,
-        encoder_hidden_dim=128,
-        remove_lang_encoder_hidden=False,
-        preprocessed_nlcomps=False,
-        **kwargs,
-    ):
-        super().__init__()
-
-        # Use a transformer to encode the NL comparison.
-        self.embedding = nn.Embedding(STATE_DIM + ACTION_DIM, encoder_hidden_dim)
-        self.position_encoding = nn.Embedding(500, encoder_hidden_dim)
-        self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=encoder_hidden_dim, nhead=4),
-            num_layers=4,
-        )
+from data.utils import STATE_OBS_DIM, ACTION_DIM, OBJECT_STATE_DIM, PROPRIO_STATE_DIM
 
 
 class NLTrajAutoencoder(nn.Module):
@@ -53,7 +31,7 @@ class NLTrajAutoencoder(nn.Module):
         self.use_visual_features = use_visual_features
         if traj_encoder == "mlp":
             self.traj_encoder = nn.Sequential(
-                nn.Linear(in_features=STATE_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
+                nn.Linear(in_features=STATE_OBS_DIM + ACTION_DIM, out_features=encoder_hidden_dim),
                 nn.ReLU(),
                 nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
             )
@@ -74,7 +52,7 @@ class NLTrajAutoencoder(nn.Module):
                 )
         elif traj_encoder == "lstm":
             self.traj_encoder = LSTMEncoder(
-                state_dim=STATE_DIM,
+                state_dim=STATE_OBS_DIM,
                 action_dim=ACTION_DIM,
                 hidden_dim=encoder_hidden_dim,
                 output_dim=feature_dim,
@@ -85,7 +63,7 @@ class NLTrajAutoencoder(nn.Module):
         self.traj_decoder = nn.Sequential(
             nn.Linear(in_features=feature_dim, out_features=decoder_hidden_dim),
             nn.ReLU(),
-            nn.Linear(in_features=decoder_hidden_dim, out_features=STATE_DIM + ACTION_DIM),
+            nn.Linear(in_features=decoder_hidden_dim, out_features=STATE_OBS_DIM + ACTION_DIM),
         )
 
         self.preprocessed_nlcomps = preprocessed_nlcomps
