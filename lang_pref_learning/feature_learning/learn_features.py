@@ -156,7 +156,7 @@ def evaluate(model, data_loader, device):
     return metrics
 
 
-def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_scheduler=False):
+def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_scheduler=False):
     ep_loss = AverageMeter("loss")
     ep_log_likelihood_loss = AverageMeter("log_likelihood_loss")
     ep_reconstruction_loss = AverageMeter("reconstruction_loss")
@@ -230,7 +230,7 @@ def train_one_epoch(model, data_loader, optimizer, device, epoch, use_lr_schedul
 
             # By now, train_loss is a scalar.
             # train_loss = reconstruction_loss + distance_loss
-            train_loss = reconstruction_loss + log_likelihood_loss + 0.0001 * traj_reg_loss
+            train_loss = reconstruction_loss + log_likelihood_loss + args.traj_reg_coeff * traj_reg_loss
 
             if args.add_norm_loss:
                 train_loss += norm_loss
@@ -458,7 +458,7 @@ def train(logger, args):
     best_val_cos_sim = -1
 
     for epoch in range(args.epochs):
-        train_metrics = train_one_epoch(model, train_loader, optimizer, device, epoch, 
+        train_metrics = train_one_epoch(args, model, train_loader, optimizer, device, epoch, 
                                         use_lr_scheduler=args.use_lr_scheduler)
 
         # Evaluation
@@ -646,6 +646,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--resample-factor", type=float, default=1.0, help="resample factor"
+    )
+    parser.add_argument(
+        "--traj-reg-coeff", type=float, default=1e-3, 
+        help="coefficient for the trajectory regularization loss"
     )
 
     args = parser.parse_args()
