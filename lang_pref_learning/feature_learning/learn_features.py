@@ -226,7 +226,9 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
             )
 
             # Add L2 loss to the trajectory embeddings
-            traj_reg_loss = torch.norm(encoded_traj_a) + torch.norm(encoded_traj_b)
+            traj_reg_loss = 0.
+            traj_reg_loss += (torch.norm(encoded_traj_a) - args.traj_reg_margin).clamp(min=0.0)
+            traj_reg_loss += (torch.norm(encoded_traj_b) - args.traj_reg_margin).clamp(min=0.0)
 
             # By now, train_loss is a scalar.
             # train_loss = reconstruction_loss + distance_loss
@@ -650,6 +652,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--traj-reg-coeff", type=float, default=1e-3, 
         help="coefficient for the trajectory regularization loss"
+    )
+    parser.add_argument(
+        "--traj-reg-margin", type=float, default=1.0, 
+        help="margin for the trajectory regularization loss"
     )
 
     args = parser.parse_args()
