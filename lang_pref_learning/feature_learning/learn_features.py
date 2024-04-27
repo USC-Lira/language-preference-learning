@@ -211,10 +211,7 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
             dot_prod = torch.einsum(
                 "ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang
             )
-            log_likelihood = logsigmoid(dot_prod)
-            log_likelihood = torch.mean(
-                log_likelihood
-            )  # Take the mean over the batch.
+            log_likelihood = logsigmoid(dot_prod).mean() # Take the mean over the batch.
             log_likelihood_loss = (
                 -1 * log_likelihood
             )  # Then convert the value to a loss.
@@ -227,8 +224,8 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
 
             # Add L2 loss to the trajectory embeddings
             traj_reg_loss = 0.
-            traj_reg_loss += (torch.norm(encoded_traj_a) - args.traj_reg_margin).clamp(min=0.0)
-            traj_reg_loss += (torch.norm(encoded_traj_b) - args.traj_reg_margin).clamp(min=0.0)
+            traj_reg_loss += (torch.norm(encoded_traj_a, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
+            traj_reg_loss += (torch.norm(encoded_traj_b, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
 
             # By now, train_loss is a scalar.
             # train_loss = reconstruction_loss + distance_loss
