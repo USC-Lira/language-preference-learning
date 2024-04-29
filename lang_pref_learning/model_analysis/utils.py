@@ -79,12 +79,12 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder,
     return traj_embeds, lang_embeds
 
 
-def get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=False, bert_model=None):
-    if not use_bert_encoder:
-        assert bert_model is not None
+def get_lang_embed(nlcomp, model, device, tokenizer, preprocessed=False, lang_model=None):
+    if not preprocessed:
+        assert lang_model is not None
         inputs = tokenizer(nlcomp, return_tensors="pt")
-        bert_output = bert_model(**inputs)
-        embedding = bert_output.last_hidden_state
+        lang_outputs = lang_model(**inputs)
+        embedding = lang_outputs.last_hidden_state
 
         # Average across the sequence to get a sentence-level embedding
         embedding = torch.mean(embedding, dim=1, keepdim=False)
@@ -92,16 +92,8 @@ def get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=False, ber
 
     else:
         # First tokenize the NL comparison and get the embedding
-        tokens = tokenizer.tokenize(tokenizer.cls_token + " " + nlcomp + " " + tokenizer.sep_token)
-        token_ids = tokenizer.convert_tokens_to_ids(tokens)
-        # Pad sequences to the common length
-        padding_length = 64 - len(token_ids)
-        # Create attention mask
-        attention_mask = [1] * len(token_ids) + [0] * padding_length
-        token_ids += [tokenizer.pad_token_id] * padding_length
-        token_ids = torch.from_numpy(np.asarray(token_ids)).unsqueeze(0).to(device)
-        attention_mask = torch.from_numpy(np.asarray(attention_mask)).unsqueeze(0).to(device)
-        hidden_states = model.lang_encoder(token_ids, attention_mask=attention_mask).last_hidden_state
+        inputs = tokenizer(nlcomp, return_tensors="pt")
+        hidden_states = model.lang_encoder(**inputs).last_hidden_state
         lang_embed = torch.mean(hidden_states, dim=1, keepdim=False).squeeze(0).detach().cpu().numpy()
 
     return lang_embed

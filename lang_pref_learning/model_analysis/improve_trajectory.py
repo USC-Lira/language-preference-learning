@@ -54,7 +54,7 @@ def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds, softmax=Fals
 
 
 def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, reward_function, less_feature_idx,
-                      greater_nlcomps, less_nlcomps, softmax=False):
+                      greater_nlcomps, less_nlcomps, all_nlcomps, softmax=False):
     # Based on the reward function, determine which feature aspect to improve
     feature_diff = optimal_traj_feature_value - curr_traj_feature_value
     reward_diff = np.multiply(feature_diff, reward_function)
@@ -71,10 +71,10 @@ def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, rewar
     else:
         # If the feature aspect is greater than the optimal trajectory, then the language comparison should be less
         nlcomp = np.random.choice(greater_nlcomps[feature_names[feature_aspect]])
-    return nlcomp
+    return nlcomp, all_nlcomps.index(nlcomp)
 
 
-def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, less_nlcomps, traj_embeds, lang_embeds,
+def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, traj_embeds, lang_embeds,
                        model, device, tokenizer, lang_encoder, args, use_softmax=False):
     reward_values = np.dot(feature_values, reward_func)
     optimal_traj_idx = np.argmax(reward_values)
@@ -96,10 +96,11 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
         # Find the nearest language embedding to the optimal trajectory embedding
         # lang_embed, lang_idx = get_best_lang(traj_embeds[optimal_traj_idx], traj_embeds[curr_traj_idx], lang_embeds)
         # nlcomp = nlcomps[lang_idx]
-        nlcomp = get_lang_feedback(feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func,
-                                   less_idx, greater_nlcomps, less_nlcomps, softmax=use_softmax)
-        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
-                                    bert_model=lang_encoder)
+        nlcomp, idx = get_lang_feedback(feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func,
+                                        less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, softmax=use_softmax)
+        lang_embed = lang_embeds[idx]
+        # lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
+        #                             lang_model=lang_encoder)
         next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds)
         next_traj_value = reward_values[next_traj_idx]
         traj_values.append(next_traj_value)
@@ -115,13 +116,29 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
     return optimal_reached, optimal_traj_value, traj_values
 
 
+def plot_results(optimal_traj_values, all_traj_values, postfix):
+    plt.plot(np.mean(all_traj_values, axis=0), label='Improved Trajectory')
+    # Draw optimal trajecotry values as a dashed horizontal line
+    plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
+    plt.xlabel('Iteration')
+    plt.ylabel('Avg. Reward')
+    plt.title('Average Reward vs. Iteration (Test Set)')
+    plt.legend()
+    
+    plt.savefig(f'model_analysis/{exp_name}/improve_traj_{postfix}.png')
+    # plt.show()
+
+
 def main(args):
     trajs = np.load(os.path.join(args.data_dir, 'test/trajs.npy'))
-    traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
-    nlcomps = json.load(open(os.path.join(args.data_dir, 'test/unique_nlcomps.json'), 'rb'))
-    nlcomps_bert_embeds = np.load(os.path.join(args.data_dir, f'test/unique_nlcomps_{args.bert_model}.npy'))
-    greater_nlcomps = json.load(open(os.path.join(args.data_dir, '../greater_nlcomps.json'), 'rb'))
-    less_nlcomps = json.load(open(os.path.join(args.data_dir, '../less_nlcomps.json'), 'rb'))
+    if args.use_image_obs:
+        traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
+        actions = np.load(os.path.join(args.data_dir, 'test/actions.npy'))
+    
+    # Use all language comparisons we have in the train, val, and test sets
+    nlcomps = json.load(open(os.path.join(args.data_dir, 'all_unique_nlcomps.json'), 'rb'))
+    greater_nlcomps = json.load(open(os.path.join(args.data_dir, 'all_greater_nlcomps.json'), 'rb'))
+    less_nlcomps = json.load(open(os.path.join(args.data_dir, 'all_less_nlcomps.json'), 'rb'))
 
     # Load the model
     if args.use_bert_encoder:
@@ -133,15 +150,17 @@ def main(args):
         tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
         feature_dim = LANG_OUTPUT_DIM[args.lang_model]
     else:
-        lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.bert_model])
-        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.bert_model])
+        lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model])
         feature_dim = 128
 
     model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=args.preprocessed_nlcomps,
-                              bert_output_dim=LANG_OUTPUT_DIM[args.bert_model],
-                              use_bert_encoder=args.use_bert_encoder)
+                              lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
+                              use_bert_encoder=args.use_bert_encoder, 
+                              traj_encoder=args.traj_encoder
+                              )
 
     state_dict = torch.load(os.path.join(args.model_dir, 'best_model_state_dict.pth'))
 
@@ -161,7 +180,10 @@ def main(args):
 
     # Get embeddings for the trajectories and language comparisons
     traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
-                                                    nlcomps_bert_embeds)
+                                                    use_img_obs=args.use_image_obs,
+                                                    img_obs=traj_img_obs,
+                                                    actions=actions,
+                                                    )
 
     # Get BERT embeddings for the language comparisons in greater_nlcomps and less_nlcomps
     greater_nlcomps_bert_embeds = {}
@@ -205,15 +227,16 @@ def main(args):
     optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values,
                                                                                         less_idx,
                                                                                         greater_nlcomps, less_nlcomps,
-                                                                                        traj_embeds,
+                                                                                        nlcomps, traj_embeds,
                                                                                         lang_embeds, model, device,
                                                                                         tokenizer,
                                                                                         lang_encoder, args,
                                                                                         use_softmax=False)
+    
     optimal_reached, optimal_traj_value_softmax, traj_values_softmax = improve_trajectory(reward_func, feature_values,
                                                                                           less_idx,
                                                                                           greater_nlcomps, less_nlcomps,
-                                                                                          traj_embeds,
+                                                                                          nlcomps, traj_embeds,
                                                                                           lang_embeds, model, device,
                                                                                           tokenizer,
                                                                                           lang_encoder, args,
@@ -227,13 +250,16 @@ if __name__ == '__main__':
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
     parser.add_argument('--data-dir', type=str, default='data')
     parser.add_argument('--use-bert-encoder', action='store_true')
-    parser.add_argument('--bert-model', type=str, default='bert-base')
+    parser.add_argument('--lang-model', type=str, default='bert-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
     parser.add_argument('--preprocessed-nlcomps', action='store_true')
     parser.add_argument('--old-model', action='store_true')
     parser.add_argument('--iterations', type=int, default=10)
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--use-image-obs', action='store_true')
+    parser.add_argument('--traj-encoder', type=str, default='cnn',
+                        choices=['mlp', 'cnn'], help='which trajectory encoder to use')
     args = parser.parse_args()
 
     exp_name = args.model_dir.split('/')[-1]
@@ -263,13 +289,7 @@ if __name__ == '__main__':
     np.save(f'{save_dir}/optimal_traj_values_softmax.npy', optimal_traj_values_softmax)
     np.save(f'{save_dir}/all_traj_values_argmax.npy', all_traj_values_argmax)
     np.save(f'{save_dir}/optimal_traj_values_argmax.npy', optimal_traj_values_argmax)
-    # plt.plot(np.mean(all_traj_values, axis=0), label='Improved Trajectory')
-    # # Draw optimal trajecotry values as a dashed horizontal line
-    # plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
-    # plt.xlabel('Iteration')
-    # plt.ylabel('Avg. Reward')
-    # plt.title('Average Reward vs. Iteration (Test Set)')
-    # plt.legend()
-    #
-    # plt.savefig(f'model_analysis/{exp_name}/improve_traj_softmax.png')
-    # plt.show()
+
+
+    plot_results(optimal_traj_values_softmax, all_traj_values_softmax, 'softmax')
+    plot_results(optimal_traj_values_argmax, all_traj_values_argmax, 'argmax')
