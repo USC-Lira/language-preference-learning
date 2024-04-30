@@ -117,6 +117,7 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
 
 
 def plot_results(optimal_traj_values, all_traj_values, postfix):
+    plt.figure()
     plt.plot(np.mean(all_traj_values, axis=0), label='Improved Trajectory')
     # Draw optimal trajecotry values as a dashed horizontal line
     plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
