@@ -24,14 +24,13 @@ from lang_pref_learning.model_analysis.improve_trajectory import (
     get_lang_feedback,
 )
 
-os.environ['CURL_CA_BUNDLE'] = ''
 
 # learned and true reward func (linear for now)
 def init_weights_with_norm_one(m):
     if isinstance(m, nn.Linear):  # Check if the module is a linear layer
         weight_shape = m.weight.size()
         # Initialize weights with a standard method
-        weights = torch.normal(mean=0, std=0.0002, size=weight_shape)
+        weights = torch.normal(mean=0, std=0.001, size=weight_shape)
         # Normalize weights to have a norm of 1
         # weights /= weights.norm(2)  # Adjust this if you need a different norm
         m.weight.data = weights
@@ -276,8 +275,9 @@ def _pref_learning(
             optimizer.step()
             if lr_scheduler is not None:
                 lr_scheduler.step()
-
-        print(f"Loss: {loss.item():.4f}, Norm of learned reward: {torch.norm(learned_reward.linear.weight):.4f}")
+                
+        if it % 10 == 0 or it == len(train_dataloader) - 1:
+            print(f"Loss: {loss.item():.4f}, Norm of learned reward: {torch.norm(learned_reward.linear.weight):.4f}")
         learned_reward_norms.append(torch.norm(learned_reward.linear.weight).item())
 
         # norm_scale_factor = np.linalg.norm(true_reward) / torch.norm(learned_reward.linear.weight).item()
@@ -300,7 +300,7 @@ def _pref_learning(
     return return_dict
 
 
-def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, test=False):
+def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, test=False, device="cuda"):
     """
     Evaluate the cross-entropy between the learned and true distributions
 
@@ -465,44 +465,43 @@ def run(args):
 
     # Check if the embeddings are already computed
     # If not, compute the embeddings
-    if not os.path.exists(f"{args.data_dir}/train/traj_embeds.npy"):
-        train_traj_embeds, train_lang_embeds = get_traj_lang_embeds(
-            train_trajs,
-            train_nlcomps,
-            model,
-            device,
-            args.use_bert_encoder,
-            tokenizer,
-            nlcomps_bert_embeds=train_nlcomps_embed,
-            use_img_obs=args.use_img_obs,
-            img_obs=train_img_obs,
-            actions=train_actions
-            
-        )
-        test_traj_embeds, test_lang_embeds = get_traj_lang_embeds(
-            test_trajs,
-            test_nlcomps,
-            model,
-            device,
-            args.use_bert_encoder,
-            tokenizer,
-            nlcomps_bert_embeds=test_nlcomps_embed,
-            use_img_obs=args.use_img_obs,
-            img_obs=test_img_obs,
-            actions=test_actions
-        )
+    train_traj_embeds, train_lang_embeds = get_traj_lang_embeds(
+        train_trajs,
+        train_nlcomps,
+        model,
+        device,
+        args.use_bert_encoder,
+        tokenizer,
+        nlcomps_bert_embeds=train_nlcomps_embed,
+        use_img_obs=args.use_img_obs,
+        img_obs=train_img_obs,
+        actions=train_actions
+        
+    )
+    test_traj_embeds, test_lang_embeds = get_traj_lang_embeds(
+        test_trajs,
+        test_nlcomps,
+        model,
+        device,
+        args.use_bert_encoder,
+        tokenizer,
+        nlcomps_bert_embeds=test_nlcomps_embed,
+        use_img_obs=args.use_img_obs,
+        img_obs=test_img_obs,
+        actions=test_actions
+    )
 
-        # Save the embeddings
-        np.save(f"{args.data_dir}/train/traj_embeds.npy", train_traj_embeds)
-        np.save(f"{args.data_dir}/train/lang_embeds.npy", train_lang_embeds)
-        np.save(f"{args.data_dir}/test/traj_embeds.npy", test_traj_embeds)
-        np.save(f"{args.data_dir}/test/lang_embeds.npy", test_lang_embeds)
+    #     # Save the embeddings
+    #     np.save(f"{args.data_dir}/train/traj_embeds.npy", train_traj_embeds)
+    #     np.save(f"{args.data_dir}/train/lang_embeds.npy", train_lang_embeds)
+    #     np.save(f"{args.data_dir}/test/traj_embeds.npy", test_traj_embeds)
+    #     np.save(f"{args.data_dir}/test/lang_embeds.npy", test_lang_embeds)
     
-    else:
-        train_traj_embeds = np.load(f"{args.data_dir}/train/traj_embeds.npy")
-        train_lang_embeds = np.load(f"{args.data_dir}/train/lang_embeds.npy")
-        test_traj_embeds = np.load(f"{args.data_dir}/test/traj_embeds.npy")
-        test_lang_embeds = np.load(f"{args.data_dir}/test/lang_embeds.npy")
+    # else:
+    #     train_traj_embeds = np.load(f"{args.data_dir}/train/traj_embeds.npy")
+    #     train_lang_embeds = np.load(f"{args.data_dir}/train/lang_embeds.npy")
+    #     test_traj_embeds = np.load(f"{args.data_dir}/test/traj_embeds.npy")
+    #     test_lang_embeds = np.load(f"{args.data_dir}/test/lang_embeds.npy")
 
     print("Mean Norm of Traj Embeds:", np.linalg.norm(train_traj_embeds, axis=1).mean())
     print("Mean Norm of Lang Embeds:", np.linalg.norm(train_lang_embeds, axis=1).mean())
@@ -527,7 +526,8 @@ def run(args):
     # lr_scheduler_noiseless = torch.optim.lr_scheduler.StepLR(optimizer_noiseless, step_size=20, gamma=0.95)
 
     # Test the entropy of test data
-    test_entropy = evaluate(test_data, test_traj_true_rewards, learned_reward, test_traj_embeds, test=True)
+    test_ce = evaluate(test_data, test_traj_true_rewards, learned_reward, test_traj_embeds, test=True)
+    print("Test Cross Entropy:", test_ce)
 
     # Load optimal trajectory given the true reward
     optimal_traj = np.load(f"{args.true_reward_dir}/traj.npy").reshape(500, 69)
@@ -578,6 +578,7 @@ def run(args):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
     ax1.plot(noisy_results["cross_entropy"], label="Noisy")
     ax1.plot(noiseless_results["cross_entropy"], label="Noiseless")
+    ax1.plot([0, len(noisy_results["cross_entropy"])], [test_ce, test_ce], 'k--', label='Ground Truth')
     ax1.set_xlabel("Number of Queries")
     ax1.set_ylabel("Cross-Entropy")
     ax1.set_title("Feedback, True Dist: Softmax")
