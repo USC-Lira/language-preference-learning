@@ -8,7 +8,7 @@ from torchvision import transforms
 from torchvision.utils import save_image
 
 
-def resize(img_obs, size=112, flip=False):
+def resize(img_obs, size=224, flip=False):
     """
     Resize the images
     """
@@ -18,13 +18,13 @@ def resize(img_obs, size=112, flip=False):
     img_obs = rearrange(img_obs, 'b t h w c -> (b t) c h w')
 
     resize = transforms.Compose([
-        transforms.Resize((112, 112)),
+        transforms.Resize((size, size), antialias=True),
     ]
     )
 
     if flip:
         resize = transforms.Compose([
-            transforms.Resize((112, 112)),
+            transforms.Resize((size, size)),
             transforms.functional.vflip,
         ]
         )
@@ -139,6 +139,6 @@ if __name__ == '__main__':
     # Save the resized images
     save_dir = args.data_dir
     os.makedirs(save_dir, exist_ok=True)
-    np.save(f'{save_dir}/traj_img_obs.npy', transformed_img_obs.numpy())
+    np.save(f'{save_dir}/traj_img_obs_{args.transform}.npy', transformed_img_obs.numpy())
 
 
