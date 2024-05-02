@@ -8,7 +8,7 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine
+from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_lang_embed
 
@@ -77,6 +77,9 @@ def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, rewar
 def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, traj_embeds, lang_embeds,
                        model, device, tokenizer, lang_encoder, args, use_softmax=False):
     reward_values = np.dot(feature_values, reward_func)
+    # Normalize reward values to be between 0 and 1
+    reward_values = (reward_values - np.min(reward_values)) / (np.max(reward_values) - np.min(reward_values))
+
     optimal_traj_idx = np.argmax(reward_values)
     optimal_traj_value = reward_values[optimal_traj_idx]
     curr_traj_idx = np.argmin(reward_values)
@@ -101,15 +104,18 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
         lang_embed = lang_embeds[idx]
         # lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
         #                             lang_model=lang_encoder)
-        next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds)
+        next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
+        # next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_value = reward_values[next_traj_idx]
-        traj_values.append(next_traj_value)
 
-        curr_traj_idx = next_traj_idx
-        curr_traj_value = next_traj_value
+        if next_traj_value > curr_traj_value:
+            curr_traj_idx = next_traj_idx
+            curr_traj_value = next_traj_value
+        
+        traj_values.append(curr_traj_value)
 
         if args.debug:
-            print(f'Iteration {i}')
+            print(f'========= Iteration {i} =========')
             print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
             print(f'Language comparison: {nlcomp}\n')
 
@@ -261,14 +267,19 @@ if __name__ == '__main__':
     parser.add_argument('--use-image-obs', action='store_true')
     parser.add_argument('--traj-encoder', type=str, default='cnn',
                         choices=['mlp', 'cnn'], help='which trajectory encoder to use')
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--num-trails', type=int, default=10)
     args = parser.parse_args()
+
+    # Set seed
+    np.random.seed(args.seed)
 
     exp_name = args.model_dir.split('/')[-1]
     optimal_traj_values_softmax = []
     all_traj_values_softmax = []
     optimal_traj_values_argmax = []
     all_traj_values_argmax = []
-    for i in range(100):
+    for i in range(args.num_trails):
         if i % 10 == 0:
             print(f'Attempt {i}')
         optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax = main(args)

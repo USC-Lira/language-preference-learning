@@ -611,6 +611,9 @@ def run(args):
         if args.adaptive_weights:
             postfix_noisy += "_adaptive_weights"
             postfix_noiseless += "_adaptive_weights"
+    else:
+        postfix_noisy += "_baseline"
+        postfix_noiseless += "_baseline"
 
     save_results(args, noisy_results, postfix=postfix_noisy)
     save_results(args, noiseless_results, postfix=postfix_noiseless)
