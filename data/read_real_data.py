@@ -42,6 +42,8 @@ def read_single_traj(traj_dir):
             [policy_out[i]["actions"][np.newaxis, :] for i in range(len(policy_out))],
             axis=0,
         )
+    
+    states = np.concatenate([states, actions], axis=-1)
 
     # Then read the images
     # First sort the images by timestep order
