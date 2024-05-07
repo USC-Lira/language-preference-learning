@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import re
 import pickle
 from PIL import Image
 from collections import defaultdict
@@ -27,6 +28,11 @@ def read_single_traj(traj_dir):
             [obs_dict["state"], obs_dict["qpos"], obs_dict["qvel"]], axis=-1
         )
 
+        # Augment state with position difference
+        pos_diff = np.diff(states[:, :3], axis=0)
+        pos_diff = np.concatenate([np.zeros((1, 3)), pos_diff], axis=0)
+        states = np.concatenate([states, pos_diff], axis=-1)
+
         states = states[:-1, :]  # Remove the last state
 
     action_file = os.path.join(traj_dir, "policy_out.pkl")
@@ -38,11 +44,22 @@ def read_single_traj(traj_dir):
         )
 
     # Then read the images
-    images = []
+    # First sort the images by timestep order
     img_dir = os.path.join(traj_dir, "images0")
 
     # Read all image files by timestep order
-    for img_file in sorted(os.listdir(img_dir)):
+    image_files = os.listdir(img_dir)
+
+    def extract_number(filename):
+        match = re.search(r'\d+', filename)
+        if match:
+            return int(match.group())
+        return None
+    
+    sorted_img_files = sorted(image_files, key=extract_number)
+
+    images = []
+    for img_file in sorted_img_files:
         # load jpg image and convert to numpy array
         img = Image.open(os.path.join(img_dir, img_file))
         img = np.asarray(img)
