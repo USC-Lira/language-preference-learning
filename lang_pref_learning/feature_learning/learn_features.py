@@ -27,9 +27,7 @@ os.environ["OMP_NUM_THREADS"] = "4"
 def load_data(args, split="train"):
     # Load the data.
     # nlcomp_index_file is a .npy file with the indexes of the nlcomps in the dataset.
-    nlcomp_index_file = os.path.join(
-        args.data_dir, "{}/nlcomp_indexes.npy".format(split)
-    )
+    nlcomp_index_file = os.path.join(args.data_dir, "{}/nlcomp_indexes.npy".format(split))
 
     # If we don't use bert in the language encoder, then we need to load the preprocessed nlcomps.
     if not args.use_bert_encoder:
@@ -37,19 +35,13 @@ def load_data(args, split="train"):
             args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.lang_model)
         )
     else:
-        unique_nlcomp_file = os.path.join(
-            args.data_dir, "{}/unique_nlcomps.json".format(split)
-        )
+        unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps.json".format(split))
 
     # traj_a_index_file is a .npy file with the indexes of the first trajectory in the dataset.
     # traj_b_index_file is a .npy file with the indexes of the second trajectory in the dataset.
     # traj_file is a .npy file with the trajectories of shape (n_trajectories, n_timesteps, STATE_DIM+ACTION_DIM)
-    traj_a_index_file = os.path.join(
-        args.data_dir, "{}/traj_a_indexes.npy".format(split)
-    )
-    traj_b_index_file = os.path.join(
-        args.data_dir, "{}/traj_b_indexes.npy".format(split)
-    )
+    traj_a_index_file = os.path.join(args.data_dir, "{}/traj_a_indexes.npy".format(split))
+    traj_b_index_file = os.path.join(args.data_dir, "{}/traj_b_indexes.npy".format(split))
     traj_file = os.path.join(args.data_dir, "{}/trajs.npy".format(split))
 
     return_files_dict = {
@@ -113,9 +105,7 @@ def evaluate(model, data_loader, device):
 
             reconstruction_loss = torch.tensor(0.0).to(device)
             if decoded_traj_a is not None and decoded_traj_b is not None:
-                reconstruction_loss = F.mse_loss(
-                    decoded_traj_a, torch.mean(data["traj_a"], dim=-2)
-                )
+                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data["traj_a"], dim=-2))
                 reconstruction_loss += F.mse_loss(
                     decoded_traj_b, torch.mean(data["traj_b"], dim=-2)
                 )
@@ -127,21 +117,15 @@ def evaluate(model, data_loader, device):
             )
             total_norm_loss += norm_loss.detach().cpu().item()
 
-            cos_sim = torch.mean(
-                F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
-            )
+            cos_sim = torch.mean(F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang))
             total_cosine_similarity += cos_sim.detach().cpu().item()
 
-            dot_prod = torch.einsum(
-                "ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang
-            )
+            dot_prod = torch.einsum("ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang)
             log_likelihood = torch.mean(logsigmoid(dot_prod))
             log_likelihood_loss = -1 * log_likelihood
             total_log_likelihood += -log_likelihood_loss.detach().cpu().item()
 
-            total_loss += (
-                (reconstruction_loss + log_likelihood_loss).detach().cpu().item()
-            )
+            total_loss += (reconstruction_loss + log_likelihood_loss).detach().cpu().item()
             total_num_correct += np.sum(dot_prod.detach().cpu().numpy() > 0)
 
     metrics = {
@@ -167,11 +151,9 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
 
     logsigmoid = nn.LogSigmoid()
     if use_lr_scheduler:
-        lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, len(data_loader))    
+        lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, len(data_loader))
 
-    with tqdm(
-        total=len(data_loader), unit="batch", position=0, leave=True
-    ) as pbar:
+    with tqdm(total=len(data_loader), unit="batch", position=0, leave=True) as pbar:
         pbar.set_description(f"Epoch {epoch + 1}/{args.epochs}")
         for train_data in data_loader:
             # load it to the active device
@@ -202,19 +184,13 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
                 )
 
             # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
-            cos_sim = F.cosine_similarity(
-                encoded_traj_b - encoded_traj_a, encoded_lang
-            )
+            cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
             cos_sim = torch.mean(cos_sim)  # Take the mean over the batch.
             distance_loss = 1 - cos_sim  # Then convert the value to a loss.
 
-            dot_prod = torch.einsum(
-                "ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang
-            )
-            log_likelihood = logsigmoid(dot_prod).mean() # Take the mean over the batch.
-            log_likelihood_loss = (
-                -1 * log_likelihood
-            )  # Then convert the value to a loss.
+            dot_prod = torch.einsum("ij,ij->i", encoded_traj_b - encoded_traj_a, encoded_lang)
+            log_likelihood = logsigmoid(dot_prod).mean()  # Take the mean over the batch.
+            log_likelihood_loss = -1 * log_likelihood  # Then convert the value to a loss.
 
             # Norm loss, to make sure the encoded lang vectors are unit vectors
             norm_loss = F.mse_loss(
@@ -223,13 +199,19 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
             )
 
             # Add L2 loss to the trajectory embeddings
-            traj_reg_loss = 0.
-            traj_reg_loss += (torch.norm(encoded_traj_a, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
-            traj_reg_loss += (torch.norm(encoded_traj_b, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
+            traj_reg_loss = 0.0
+            traj_reg_loss += (
+                (torch.norm(encoded_traj_a, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
+            )
+            traj_reg_loss += (
+                (torch.norm(encoded_traj_b, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
+            )
 
             # By now, train_loss is a scalar.
             # train_loss = reconstruction_loss + distance_loss
-            train_loss = reconstruction_loss + log_likelihood_loss + args.traj_reg_coeff * traj_reg_loss
+            train_loss = (
+                reconstruction_loss + log_likelihood_loss + args.traj_reg_coeff * traj_reg_loss
+            )
 
             if args.add_norm_loss:
                 train_loss += norm_loss
@@ -244,17 +226,15 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
 
             # add the mini-batch training loss to epoch loss
             ep_loss.update(train_loss.item(), train_data["traj_a"].shape[0])
-            ep_reconstruction_loss.update(
-                reconstruction_loss.item(), train_data["traj_a"].shape[0]
-            )
-            ep_log_likelihood_loss.update(
-                log_likelihood_loss.item(), train_data["traj_a"].shape[0]
-            )
+            ep_reconstruction_loss.update(reconstruction_loss.item(), train_data["traj_a"].shape[0])
+            ep_log_likelihood_loss.update(log_likelihood_loss.item(), train_data["traj_a"].shape[0])
             ep_cosine_sim.update(cos_sim.item(), train_data["traj_a"].shape[0])
             ep_norm_loss.update(norm_loss.item(), train_data["traj_a"].shape[0])
             ep_traj_reg_loss.update(traj_reg_loss.item(), train_data["traj_a"].shape[0])
-            ep_train_acc.update(np.sum(dot_prod.detach().cpu().numpy() > 0) / len(dot_prod), 
-                                train_data["traj_a"].shape[0])
+            ep_train_acc.update(
+                np.sum(dot_prod.detach().cpu().numpy() > 0) / len(dot_prod),
+                train_data["traj_a"].shape[0],
+            )
 
             tqdm_postfix = {
                 "log_likelihood_loss": ep_log_likelihood_loss.avg,
@@ -267,7 +247,7 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
 
             pbar.set_postfix(tqdm_postfix)
             pbar.update()
-    
+
     metrics = {
         "loss": ep_loss.avg,
         "reconstruction_loss": ep_reconstruction_loss.avg,
@@ -290,7 +270,7 @@ def train(logger, args):
     # Load model to the specified device, either gpu or cpu
     logger.info("Initializing model and loading to device...")
     if args.use_bert_encoder:
-        if 't5' in args.lang_model:
+        if "t5" in args.lang_model:
             lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
         else:
             lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
@@ -338,11 +318,8 @@ def train(logger, args):
 
     # create an optimizer object
     # Adam optimizer with learning rate 1e-3
-    optimizer = optim.Adam(
-        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
-    )
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.to(device)
-
 
     logger.info("Loading dataset...")
 
@@ -457,8 +434,15 @@ def train(logger, args):
     best_val_cos_sim = -1
 
     for epoch in range(args.epochs):
-        train_metrics = train_one_epoch(args, model, train_loader, optimizer, device, epoch, 
-                                        use_lr_scheduler=args.use_lr_scheduler)
+        train_metrics = train_one_epoch(
+            args,
+            model,
+            train_loader,
+            optimizer,
+            device,
+            epoch,
+            use_lr_scheduler=args.use_lr_scheduler,
+        )
 
         # Evaluation
         val_metrics = evaluate(model, val_loader, device)
@@ -469,19 +453,25 @@ def train(logger, args):
         val_log_likelihood = val_metrics["log_likelihood"]
         val_acc = val_metrics["accuracy"]
 
-        # display the epoch training loss
+        # display the epoch training and evaluation metrics
         logger.info(
-            "epoch : {}/{}, [train] loss = {:.4f}, [val] loss = {:.4f}, [val] reconstruction_loss = {:.4f}, "
-            "[val] norm loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.4f}".format(
+            "epoch : {}/{}, [train] loss = {:.4f}, [train] acc= {:.4f}".format(
                 epoch + 1,
                 args.epochs,
                 train_metrics["loss"],
-                val_loss,
-                val_reconstruction_loss,
-                val_norm_loss,
-                val_cosine_similarity,
-                val_log_likelihood,
-                val_acc,
+                train_metrics["accuracy"],
+            )
+        )
+
+        logger.info(
+            "[val] loss = {:.4f}, [val] reconstruction_loss = {:.4f}, "
+            "[val] norm loss = {:.4f}, [val] cos_similarity = {:.4f}, [val] log_likelihood = {:.4f}, [val] accuracy = {:.4f}".format(
+                val_metrics["loss"],
+                val_metrics["reconstruction_loss"],
+                val_metrics["norm_loss"],
+                val_metrics["cosine_similarity"],
+                val_metrics["log_likelihood"],
+                val_metrics["accuracy"],
             )
         )
         # Don't forget to save the model (as we go)!
@@ -502,9 +492,7 @@ def train(logger, args):
         val_cosine_similarities.append(val_cosine_similarity)
         val_log_likelihoods.append(val_log_likelihood)
         accuracies.append(val_acc)
-        np.save(
-            os.path.join(args.save_dir, "train_losses.npy"), np.asarray(train_losses)
-        )
+        np.save(os.path.join(args.save_dir, "train_losses.npy"), np.asarray(train_losses))
         np.save(os.path.join(args.save_dir, "val_losses.npy"), np.asarray(val_losses))
         np.save(
             os.path.join(args.save_dir, "val_reconstruction_losses.npy"),
@@ -521,9 +509,7 @@ def train(logger, args):
         np.save(os.path.join(args.save_dir, "accuracies.npy"), np.asarray(accuracies))
 
     # Test the model on the test set.
-    model.load_state_dict(
-        torch.load(os.path.join(args.save_dir, "best_model_state_dict.pth"))
-    )
+    model.load_state_dict(torch.load(os.path.join(args.save_dir, "best_model_state_dict.pth")))
     model.eval()
 
     test_metrics = evaluate(model, test_loader, device)
@@ -575,9 +561,7 @@ if __name__ == "__main__":
         action="store_true",
         help="whether to check initial loss",
     )
-    parser.add_argument(
-        "--finetune-bert", action="store_true", help="whether to finetune BERT"
-    )
+    parser.add_argument("--finetune-bert", action="store_true", help="whether to finetune BERT")
     parser.add_argument(
         "--save-dir",
         type=str,
@@ -585,9 +569,11 @@ if __name__ == "__main__":
         help="where to save the model",
     )
     parser.add_argument(
-        "--lang-model", type=str, default="bert-base", 
+        "--lang-model",
+        type=str,
+        default="bert-base",
         choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
-        help="which language model to use"
+        help="which language model to use",
     )
     parser.add_argument(
         "--use-bert-encoder",
@@ -617,9 +603,7 @@ if __name__ == "__main__":
         action="store_true",
         help="whether to use stacked image observations",
     )
-    parser.add_argument(
-        "--n-frames", type=int, default=3, help="number of frames to stack"
-    )
+    parser.add_argument("--n-frames", type=int, default=3, help="number of frames to stack")
     parser.add_argument(
         "--use-visual-features",
         action="store_true",
@@ -643,22 +627,27 @@ if __name__ == "__main__":
         action="store_true",
         help="whether to resample the image observations",
     )
+    parser.add_argument("--resample-factor", type=float, default=1.0, help="resample factor")
     parser.add_argument(
-        "--resample-factor", type=float, default=1.0, help="resample factor"
+        "--traj-reg-coeff",
+        type=float,
+        default=1e-3,
+        help="coefficient for the trajectory regularization loss",
     )
     parser.add_argument(
-        "--traj-reg-coeff", type=float, default=1e-3, 
-        help="coefficient for the trajectory regularization loss"
-    )
-    parser.add_argument(
-        "--traj-reg-margin", type=float, default=1.0, 
-        help="margin for the trajectory regularization loss"
+        "--traj-reg-margin",
+        type=float,
+        default=1.0,
+        help="margin for the trajectory regularization loss",
     )
 
     args = parser.parse_args()
 
     # Create exp directory and logger
-    exp_dir = os.path.join("exp", f"{timeStamped(args.exp_name)}_lr_{args.lr}_schedule_{args.use_lr_scheduler}")
+    exp_dir = os.path.join(
+        "exp",
+        f"{timeStamped(args.exp_name)}_lr_{args.lr}_schedule_{args.use_lr_scheduler}",
+    )
     os.makedirs(exp_dir, exist_ok=True)
     logger = create_logger(exp_dir)
     args.save_dir = exp_dir
