@@ -39,13 +39,13 @@ class NLTrajComparisonDataset(Dataset):
         self.traj_bs = np.load(traj_b_file)
         if use_img_obs:
             self.img_observations = np.load(img_obs_file)
-            self.actions = np.load(action_file)
+            # self.actions = np.load(action_file)
 
             if resample:
                 resample_frames = int(1 / resample_factor)
                 self.trajs = self.trajs[:, ::resample_frames]
                 self.img_observations = self.img_observations[:, ::resample_frames]
-                self.actions = self.actions[:, ::resample_frames]
+                # self.actions = self.actions[:, ::resample_frames]
 
                 # assert self.img_observations.shape[1] == int(
                 #     seq_len * resample_factor
@@ -96,10 +96,9 @@ class NLTrajComparisonDataset(Dataset):
         self.unique_nlcomps_attention_masks = self.unique_nlcomps_attention_masks.to(device)
 
         if self.use_img_obs:
-            self.img_observations = torch.tensor(self.img_observations, dtype=torch.float32).to(
+            self.img_observations = torch.tensor(self.img_observations, dtype=torch.float16).to(
                 device
             )
-            self.actions = torch.tensor(self.actions, dtype=torch.float32).to(device)
 
     def __len__(self):
         return len(self.nlcomps)
@@ -116,8 +115,6 @@ class NLTrajComparisonDataset(Dataset):
         if self.use_img_obs:
             data["img_obs_a"] = self.img_observations[self.traj_as[idx]]
             data["img_obs_b"] = self.img_observations[self.traj_bs[idx]]
-            data["actions_a"] = self.actions[self.traj_as[idx]]
-            data["actions_b"] = self.actions[self.traj_bs[idx]]
 
         if self.preprocessed_nlcomps:
             data["nlcomp"] = torch.tensor(self.unique_nlcomps[self.nlcomps[idx]])

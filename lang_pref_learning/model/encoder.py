@@ -89,14 +89,12 @@ class NLTrajAutoencoder(nn.Module):
         # Encode trajectories
         if self.traj_encoder_cls == "cnn":
             inputs_a = {
-                "state": inputs["traj_a"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM],
+                "states": inputs["traj_a"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM + ACTION_DIM],
                 "img_obs": inputs["img_obs_a"],
-                "actions": inputs["actions_a"],
             }
             inputs_b = {
-                "state": inputs["traj_b"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM],
+                "states": inputs["traj_b"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM + ACTION_DIM],
                 "img_obs": inputs["img_obs_b"],
-                "actions": inputs["actions_b"],
             }
             encoded_traj_a = self.traj_encoder(inputs_a, train=train)
             encoded_traj_b = self.traj_encoder(inputs_b, train=train)
