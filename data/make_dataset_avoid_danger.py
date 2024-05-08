@@ -178,8 +178,65 @@ def filter_labels_by_indices(indices, traj_labels):
     return filtered_dict
 
 
+
+def generate_pair_comparisons(traj_i, traj_j, avg_value_i, avg_value_j, augmented_comps, feature, split="train"):
+    """
+    Generate the comparisons for each pair of trajectories
+
+    Args:
+        - traj_i: int, the index of the first trajectory
+        - traj_j: int, the index of the second trajectory
+        - avg_value_i: float, the average value of the first trajectory
+        - avg_value_j: float, the average value of the second trajectory
+        - augmented_comps: dict, the augmented comparisons
+        - feature: str, the feature of the comparison
+        - split: str, the split of the dataset
+
+    Returns:
+        - lang_comps: list, the language comparisons
+
+    """
+    traj_a_indexes = []
+    traj_b_indexes = []
+    lang_comps = []
+
+    greater_lang_comps = generate_lang_comparisons(
+                feature, "greater", augmented_comps, split
+    )
+    
+    less_lang_comps = generate_lang_comparisons(
+        feature, "less", augmented_comps, split
+    )
+
+    # Compare traj_j to traj_i
+    if avg_value_i < avg_value_j:
+        for lang_comp in greater_lang_comps:
+            traj_a_indexes.append(traj_i)
+            traj_b_indexes.append(traj_j)
+            lang_comps.append(lang_comp)
+        
+        for lang_comp in less_lang_comps:
+            traj_a_indexes.append(traj_j)
+            traj_b_indexes.append(traj_i)
+            lang_comps.append(lang_comp)
+    
+    else:
+        for lang_comp in greater_lang_comps:
+            traj_a_indexes.append(traj_j)
+            traj_b_indexes.append(traj_i)
+            lang_comps.append(lang_comp)
+
+        for lang_comp in less_lang_comps:
+            traj_a_indexes.append(traj_i)
+            traj_b_indexes.append(traj_j)
+            lang_comps.append(lang_comp)
+
+    return traj_a_indexes, traj_b_indexes, lang_comps
+
+
+
 def generate_comparisons_in_range(
-    traj_labels, traj_idx, actions, augmented_comps, root_dir, split="train"
+    traj_labels, traj_idx, states, actions, augmented_comps, root_dir, split="train"
 ):
     """
     Generate the comparisons in the given range of the indexes
@@ -201,8 +258,7 @@ def generate_comparisons_in_range(
     traj_a_indexes, traj_b_indexes = [], []
     all_lang_comps = []
 
-    # features = ["success", "avoid"]
-    features = []
+    features = ["success"]
     for feature in features:
         greater_traj_idx = filtered_traj_labels[feature_labels_dict[feature][0]]
         less_traj_idx = filtered_traj_labels[feature_labels_dict[feature][1]]
@@ -228,15 +284,61 @@ def generate_comparisons_in_range(
                     traj_a_indexes.append(np.where(traj_idx == i)[0][0])
                     traj_b_indexes.append(np.where(traj_idx == j)[0][0])
                     all_lang_comps.append(lang_comp)
+
+    # Compare every two trajectories based on pan avoidance
+    pan_pos = np.array([0.395, 0.065])
+    for i in range(len(traj_idx)):
+        for j in range(i + 1, len(traj_idx)):
+            real_traj_idx_i, real_traj_idx_j = traj_idx[i], traj_idx[j]
+            pan_dist_i = np.linalg.norm(states[real_traj_idx_i][:, :2] - pan_pos, axis=1)
+            pan_dist_j = np.linalg.norm(states[real_traj_idx_j][:, :2] - pan_pos, axis=1)
+
+            avg_pan_dist_i, avg_pan_dist_j = np.mean(pan_dist_i), np.mean(pan_dist_j)
+
+            greater_lang_comps = generate_lang_comparisons(
+                "avoid", "greater", augmented_comps, split
+            )
+            for lang_comp in greater_lang_comps:
+                if avg_pan_dist_i < avg_pan_dist_j:
+                    traj_a_indexes.append(i)
+                    traj_b_indexes.append(j)
+                else:
+                    traj_a_indexes.append(j)
+                    traj_b_indexes.append(i)
+
+                all_lang_comps.append(lang_comp)
+            
+            less_lang_comps = generate_lang_comparisons(
+                "avoid", "less", augmented_comps, split
+            )
+            for lang_comp in less_lang_comps:
+                if avg_pan_dist_i > avg_pan_dist_j:
+                    traj_a_indexes.append(i)
+                    traj_b_indexes.append(j)
+                else:
+                    traj_a_indexes.append(j)
+                    traj_b_indexes.append(i)
+
+                all_lang_comps.append(lang_comp)
+
     
     # Compare every two trajectories based on speed
     # import ipdb; ipdb.set_trace()
     for i in range(len(traj_idx)):
         for j in range(i+1, len(traj_idx)):
-            speeds_i = np.linalg.norm([action[:3] for action in actions[i]], axis=-1)
-            speeds_j = np.linalg.norm([action[:3] for action in actions[j]], axis=-1)
+            real_traj_idx_i, real_traj_idx_j = traj_idx[i], traj_idx[j]
+            speeds_i = np.linalg.norm([action[:3] for action in actions[real_traj_idx_i]], axis=-1)
+            speeds_j = np.linalg.norm([action[:3] for action in actions[real_traj_idx_j]], axis=-1)
 
             avg_speed_i, avg_speed_j = np.mean(speeds_i), np.mean(speeds_j)
+
+            i_pos_diff = np.mean(np.linalg.norm(states[real_traj_idx_i][:, 16:19], axis=1), axis=0)
+            j_pos_diff = np.mean(np.linalg.norm(states[real_traj_idx_j][:, 16:19], axis=1), axis=0)
+            
+            # ensure the relation between the two trajectories is correct
+            # if (avg_speed_i < avg_speed_j and i_pos_diff < j_pos_diff) or (avg_speed_i >= avg_speed_j and i_pos_diff >= j_pos_diff):
+            #     print(f"Trajectory at index {traj_idx[i]} and trajectory at index {traj_idx[j]} should maintain consistent speed and positional difference relationships..., Skipping...")
+            #     continue
 
             greater_lang_comps = generate_lang_comparisons(
                 "speed", "greater", augmented_comps, split
@@ -316,15 +418,15 @@ def generate_dataset(data_dir):
 
     # Generate the comparisons
     generate_comparisons_in_range(
-        traj_labels, train_traj_idx, actions, augmented_comps, data_dir, "train"
+        traj_labels, train_traj_idx, states, actions, augmented_comps, data_dir, "train"
     )
 
     generate_comparisons_in_range(
-        traj_labels, val_traj_idx, actions, augmented_comps, data_dir, "val",
+        traj_labels, val_traj_idx, states, actions, augmented_comps, data_dir, "val",
     )
 
     generate_comparisons_in_range(
-        traj_labels, test_traj_idx, actions, augmented_comps, data_dir, "test",
+        traj_labels, test_traj_idx, states, actions, augmented_comps, data_dir, "test",
     )
 
 
