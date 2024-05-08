@@ -10,7 +10,7 @@ from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME
 os.environ["OMP_NUM_THREADS"] = "4"
 
 
-def preprocess_strings(nlcomp_dir, LANG_MODEL, nlcomp_list=None, id_mapping=False, save=False):
+def preprocess_strings(nlcomp_dir, lang_model, nlcomp_list=None, id_mapping=False, save=False):
     if nlcomp_list is None:
         assert nlcomp_dir != ''
         # nlcomp_file is a json file with the list of comparisons in NL.
@@ -32,13 +32,15 @@ def preprocess_strings(nlcomp_dir, LANG_MODEL, nlcomp_list=None, id_mapping=Fals
     for nlcomp in nlcomps:
         nlcomp_indexes.append(id_map[nlcomp])
     if save:
+        with open(os.path.join(nlcomp_dir, 'unique_nlcomps.json'), 'w') as f:
+            json.dump(unique_nlcomps, f)
         np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes.npy'), np.asarray(nlcomp_indexes, dtype=np.int32))
 
     unbatched_input = unique_nlcomps
 
     # Get BERT embeddings
-    tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[LANG_MODEL])
-    model = AutoModel.from_pretrained(LANG_MODEL_NAME[LANG_MODEL])
+    tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[lang_model])
+    model = AutoModel.from_pretrained(LANG_MODEL_NAME[lang_model])
     lang_embeddings = []
     for sentence in unbatched_input:
         inputs = tokenizer(sentence, return_tensors="pt")
@@ -50,7 +52,7 @@ def preprocess_strings(nlcomp_dir, LANG_MODEL, nlcomp_list=None, id_mapping=Fals
         lang_embeddings.append(embedding.detach().numpy())
 
     if id_mapping:
-        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(LANG_MODEL))
+        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(lang_model))
     else:
         outfile = os.path.join(nlcomp_dir, 'nlcomps.npy')
 
@@ -70,4 +72,4 @@ if __name__ == '__main__':
     parser.add_argument('--lang-model', default='bert-base', help='Which BERT model to use')
 
     args = parser.parse_args()
-    preprocess_strings(args.data_dir, args.LANG_MODEL, id_mapping=args.id_mapping, save=True)
+    preprocess_strings(args.data_dir, args.lang_model, id_mapping=args.id_mapping, save=True)
