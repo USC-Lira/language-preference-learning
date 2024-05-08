@@ -8,8 +8,12 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
-from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds
+
+from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
+from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
+from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+
 
 
 def get_nearest_embed_distance(embed, lang_embed, embeds, index=None):
@@ -28,7 +32,7 @@ def get_nearest_embed_distance(embed, lang_embed, embeds, index=None):
     return np.argmin(norm)
 
 
-def get_nearest_embed_cosine(embed, lang_embed, embeds):
+def get_nearest_embed_cosine(embed, lang_embed, embeds, index=None):
     """
         Get the nearest embedding to embed from embeds
         Input:
@@ -37,8 +41,29 @@ def get_nearest_embed_cosine(embed, lang_embed, embeds):
         Output:
             the index of the nearest embedding in embeds
     """
-    return np.argmax(np.dot(embeds - embed, lang_embed) / (
-                np.linalg.norm(embeds - embed + 1e-5, axis=1) * np.linalg.norm(lang_embed)))
+    cos_sim = np.dot(embeds, embed + lang_embed) / (
+            np.linalg.norm(embeds, axis=1) * np.linalg.norm(embed + lang_embed))
+    if index:
+        cos_sim = np.delete(cos_sim, index)
+    return np.argmax(cos_sim)
+
+
+def get_nearest_embed_project(embed, lang_embed, embeds, index=None):
+    """
+        Get the nearest embedding based on the projection
+        Input:
+            embed: the embedding to compare to
+            embeds: the list of embeddings to compare against
+        Output:
+            the index of the nearest embedding in embeds
+    """
+    new_embed = embed + lang_embed
+    embeds_norm = np.linalg.norm(embeds, axis=1)
+    proj = np.dot(embeds, new_embed) / embeds_norm
+    if index:
+        proj = np.delete(proj, index)
+    return np.argmax(proj)
+    
 
 
 def get_feature_class(nlcomp, classified_nlcomps):
@@ -87,7 +112,24 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
         tokenizer = None
         feature_dim = 128
 
-    model = NLTrajAutoencoder(encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
+    if args.env == "robosuite":
+        STATE_OBS_DIM = RS_STATE_OBS_DIM
+        ACTION_DIM = RS_ACTION_DIM
+        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
+    elif args.env == "widowx":
+        STATE_OBS_DIM = WidowX_STATE_OBS_DIM
+        ACTION_DIM = WidowX_ACTION_DIM
+        PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
+    elif args.env == "metaworld":
+        # TODO: fill in the dimensions for metaworld
+        pass
+    else:
+        raise ValueError("Invalid environment")
+
+    model = NLTrajAutoencoder(STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
+                              encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=LANG_OUTPUT_DIM[bert_model],
                               use_bert_encoder=use_bert_encoder, traj_encoder=traj_encoder)

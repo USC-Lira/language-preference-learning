@@ -7,10 +7,14 @@ import os
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
-from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_lang_embed
+
+from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
+from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
+from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
+from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 
 
 def initialize_reward(num_features):
@@ -161,7 +165,24 @@ def main(args):
         tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model])
         feature_dim = 128
 
-    model = NLTrajAutoencoder(encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
+    if args.env == "robosuite":
+        STATE_OBS_DIM = RS_STATE_OBS_DIM
+        ACTION_DIM = RS_ACTION_DIM
+        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
+    elif args.env == "widowx":
+        STATE_OBS_DIM = WidowX_STATE_OBS_DIM
+        ACTION_DIM = WidowX_ACTION_DIM
+        PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
+    elif args.env == "metaworld":
+        # TODO: fill in the dimensions for metaworld
+        pass
+    else:
+        raise ValueError("Invalid environment")
+
+    model = NLTrajAutoencoder(STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
+                              encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=args.preprocessed_nlcomps,
                               lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],

@@ -24,6 +24,10 @@ from lang_pref_learning.model_analysis.improve_trajectory import (
     get_lang_feedback,
 )
 
+from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
+from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
+from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+
 
 # learned and true reward func (linear for now)
 def init_weights_with_norm_one(m):
@@ -437,8 +441,24 @@ def run(args):
         tokenizer = None
         feature_dim = 128
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.env == "robosuite":
+        STATE_OBS_DIM = RS_STATE_OBS_DIM
+        ACTION_DIM = RS_ACTION_DIM
+        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
+    elif args.env == "widowx":
+        STATE_OBS_DIM = WidowX_STATE_OBS_DIM
+        ACTION_DIM = WidowX_ACTION_DIM
+        PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
+    elif args.env == "metaworld":
+        # TODO: fill in the dimensions for metaworld
+        pass
+    else:
+        raise ValueError("Invalid environment")
+
     model = NLTrajAutoencoder(
+        STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
         encoder_hidden_dim=args.encoder_hidden_dim,
         feature_dim=feature_dim,
         decoder_hidden_dim=args.decoder_hidden_dim,
@@ -460,8 +480,10 @@ def run(args):
         state_dict = new_state_dict
 
     model.load_state_dict(state_dict)
-    model.to(device)
     model.eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
 
     # Check if the embeddings are already computed
     # If not, compute the embeddings

@@ -40,6 +40,16 @@ DISTANCE_TO_BOTTLE_STD = None
 DISTANCE_TO_CUBE_MEAN = None
 DISTANCE_TO_CUBE_STD = None
 
+RS_STATE_OBS_DIM = 65
+RS_ACTION_DIM = 4
+RS_OBJECT_STATE_DIM = 25
+RS_PROPRIO_STATE_DIM = 40
+
+WidowX_STATE_OBS_DIM = 22
+WidowX_ACTION_DIM = 7  # OSC_POSITION controller
+WidowX_OBJECT_STATE_DIM = 0
+WidowX_PROPRIO_STATE_DIM = 22
+
 
 def calc_and_set_global_vars(trajs):
     horizon = len(trajs[0])
@@ -255,17 +265,11 @@ def generate_noisy_augmented_synthetic_comparisons_commands(traj1, traj2, n_dupl
     return total_commands
 
 
-STATE_OBS_DIM = 65
-ACTION_DIM = 4  # OSC_POSITION controller
-OBJECT_STATE_DIM = 25
-PROPRIO_STATE_DIM = 40
-
-
 def gt_reward(gym_obs):
-    assert len(gym_obs) == STATE_OBS_DIM or len(
-        gym_obs) == STATE_OBS_DIM + ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
-    object_state = gym_obs[0:OBJECT_STATE_DIM]
-    proprio_state = gym_obs[OBJECT_STATE_DIM:STATE_OBS_DIM]
+    assert len(gym_obs) == RS_STATE_OBS_DIM or len(
+        gym_obs) == RS_STATE_OBS_DIM + RS_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    object_state = gym_obs[0:RS_OBJECT_STATE_DIM]
+    proprio_state = gym_obs[RS_OBJECT_STATE_DIM: RS_STATE_OBS_DIM]
 
     reward = 0.0
 
@@ -292,10 +296,10 @@ def gt_reward(gym_obs):
 
 
 def speed(gym_obs):
-    assert len(gym_obs) == STATE_OBS_DIM or len(
-        gym_obs) == STATE_OBS_DIM + ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
-    object_state = gym_obs[0:OBJECT_STATE_DIM]
-    proprio_state = gym_obs[OBJECT_STATE_DIM:STATE_OBS_DIM]
+    assert len(gym_obs) == RS_STATE_OBS_DIM or len(
+        gym_obs) == RS_STATE_OBS_DIM + RS_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    object_state = gym_obs[0:RS_OBJECT_STATE_DIM]
+    proprio_state = gym_obs[RS_OBJECT_STATE_DIM: RS_STATE_OBS_DIM]
 
     # joint_vel = proprio_state[14:21]
     # gripper_qvel = proprio_state[34:40]
@@ -312,8 +316,8 @@ prev_eef_pos = np.zeros(3)
 
 def finite_diff_speed(gym_obs):
     global prev_eef_pos
-    object_state = gym_obs[0:OBJECT_STATE_DIM]
-    proprio_state = gym_obs[OBJECT_STATE_DIM:STATE_OBS_DIM]
+    object_state = gym_obs[0:RS_OBJECT_STATE_DIM]
+    proprio_state = gym_obs[RS_OBJECT_STATE_DIM: RS_STATE_OBS_DIM]
     eef_pos = proprio_state[21:24]
     vel = eef_pos - prev_eef_pos
     prev_eef_pos = eef_pos
@@ -321,30 +325,30 @@ def finite_diff_speed(gym_obs):
 
 
 def height(gym_obs):
-    assert len(gym_obs) == STATE_OBS_DIM or len(
-        gym_obs) == STATE_OBS_DIM + ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
-    object_state = gym_obs[0:OBJECT_STATE_DIM]
-    proprio_state = gym_obs[OBJECT_STATE_DIM:STATE_OBS_DIM]
+    assert len(gym_obs) == RS_STATE_OBS_DIM or len(
+        gym_obs) == RS_STATE_OBS_DIM + RS_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    object_state = gym_obs[0:RS_OBJECT_STATE_DIM]
+    proprio_state = gym_obs[RS_OBJECT_STATE_DIM: RS_STATE_OBS_DIM]
 
     eef_pos = proprio_state[21:24]
     return eef_pos[2]  # Returning z-component of end-effector position as height.
 
 
 def distance_to_bottle(gym_obs):
-    assert len(gym_obs) == STATE_OBS_DIM or len(
-        gym_obs) == STATE_OBS_DIM + ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
-    object_state = gym_obs[0:OBJECT_STATE_DIM]
-    proprio_state = gym_obs[OBJECT_STATE_DIM:STATE_OBS_DIM]
+    assert len(gym_obs) == RS_STATE_OBS_DIM or len(
+        gym_obs) == RS_STATE_OBS_DIM + RS_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    object_state = gym_obs[0:RS_OBJECT_STATE_DIM]
+    proprio_state = gym_obs[RS_OBJECT_STATE_DIM: RS_STATE_OBS_DIM]
 
     gripper_to_bottle_pos = object_state[17:20]
     return np.linalg.norm(gripper_to_bottle_pos, 2)
 
 
 def distance_to_cube(gym_obs):
-    assert len(gym_obs) == STATE_OBS_DIM or len(
-        gym_obs) == STATE_OBS_DIM + ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
-    object_state = gym_obs[0:OBJECT_STATE_DIM]
-    proprio_state = gym_obs[OBJECT_STATE_DIM:STATE_OBS_DIM]
+    assert len(gym_obs) == RS_STATE_OBS_DIM or len(
+        gym_obs) == RS_STATE_OBS_DIM + RS_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    object_state = gym_obs[0:RS_OBJECT_STATE_DIM]
+    proprio_state = gym_obs[RS_OBJECT_STATE_DIM: RS_STATE_OBS_DIM]
 
     gripper_to_cube_pos = object_state[7:10]
     return np.linalg.norm(gripper_to_cube_pos, 2)

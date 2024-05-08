@@ -5,12 +5,15 @@ import torch.nn as nn
 from lang_pref_learning.model.lstm import LSTMEncoder
 from lang_pref_learning.model.cnn import CNNEncoder
 from lang_pref_learning.model.visual_mlp import VisualMLP
-from data.utils import STATE_OBS_DIM, ACTION_DIM, OBJECT_STATE_DIM, PROPRIO_STATE_DIM
 
 
 class NLTrajAutoencoder(nn.Module):
     def __init__(
         self,
+        STATE_OBS_DIM,
+        ACTION_DIM,
+        PROPRIO_STATE_DIM,
+        OBJECT_STATE_DIM,
         encoder_hidden_dim=128,
         feature_dim=256,
         decoder_hidden_dim=128,
@@ -79,6 +82,12 @@ class NLTrajAutoencoder(nn.Module):
                 nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
             )
 
+        # state_dim = proprio_state_dim + object_state_dim
+        self.state_dim = STATE_OBS_DIM
+        self.action_dim = ACTION_DIM
+        self.proprio_state_dim = PROPRIO_STATE_DIM
+        self.object_state_dim = OBJECT_STATE_DIM
+
     # Input is a tuple with (trajectory_a, trajectory_b, language)
     # traj_a has shape (n_trajs, n_timesteps, state+action)
     def forward(self, inputs, train=False):
@@ -89,11 +98,11 @@ class NLTrajAutoencoder(nn.Module):
         # Encode trajectories
         if self.traj_encoder_cls == "cnn":
             inputs_a = {
-                "states": inputs["traj_a"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM + ACTION_DIM],
+                "states": inputs["traj_a"][:, :, self.object_state_dim: self.state_dim + self.action_dim],
                 "img_obs": inputs["img_obs_a"],
             }
             inputs_b = {
-                "states": inputs["traj_b"][:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM + ACTION_DIM],
+                "states": inputs["traj_b"][:, :, self.object_state_dim: self.state_dim + self.action_dim],
                 "img_obs": inputs["img_obs_b"],
             }
             encoded_traj_a = self.traj_encoder(inputs_a, train=train)

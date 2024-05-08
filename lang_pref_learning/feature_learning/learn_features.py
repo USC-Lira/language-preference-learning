@@ -19,6 +19,8 @@ from lang_pref_learning.feature_learning.utils import (
     create_logger,
     AverageMeter,
 )
+from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
+from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["OMP_NUM_THREADS"] = "4"
@@ -282,7 +284,24 @@ def train(logger, args):
         tokenizer = None
         feature_dim = 128
 
+    if args.env == "robosuite":
+        STATE_OBS_DIM = RS_STATE_OBS_DIM
+        ACTION_DIM = RS_ACTION_DIM
+        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
+    elif args.env == "widowx":
+        STATE_OBS_DIM = WidowX_STATE_OBS_DIM
+        ACTION_DIM = WidowX_ACTION_DIM
+        PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
+    elif args.env == "metaworld":
+        # TODO: fill in the dimensions for metaworld
+        pass
+    else:
+        raise ValueError("Invalid environment")
+
     model = NLTrajAutoencoder(
+        STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
         encoder_hidden_dim=args.encoder_hidden_dim,
         feature_dim=feature_dim,
         decoder_hidden_dim=args.decoder_hidden_dim,
@@ -544,7 +563,14 @@ if __name__ == "__main__":
         "--exp-name",
         type=str,
         default="feature_learning",
-        help="The name of experiment",
+        help="the name of experiment",
+    )
+    parser.add_argument(
+        "--env",
+        type=str,
+        default="robosuite",
+        choices=["robosuite", "widowx", "metaworld"],
+        help="which environment to use",
     )
     parser.add_argument("--seed", type=int, default=0, help="")
     parser.add_argument("--data-dir", type=str, default="data/", help="")
