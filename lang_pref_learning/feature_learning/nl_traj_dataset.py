@@ -39,6 +39,8 @@ class NLTrajComparisonDataset(Dataset):
         self.traj_bs = np.load(traj_b_file)
         if use_img_obs:
             self.img_observations = np.load(img_obs_file)
+            print("HIHIHI IMG OBS SHAPE:")
+            print(self.img_observations.shape)
             self.actions = np.load(action_file)
 
             if resample:
