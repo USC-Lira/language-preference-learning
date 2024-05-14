@@ -218,17 +218,16 @@ def comp_pref_learning(
         if it % 10 == 0 or it == len(train_lang_dataloader) - 1:
             print(f"Loss: {loss.item():.4f}, Norm of learned reward: {torch.norm(learned_reward.linear.weight):.4f}")
             learned_reward_norms.append(torch.norm(learned_reward.linear.weight).item())
+        
+        # Evaluation
+        cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
 
-            # norm_scale_factor = np.linalg.norm(true_reward) / torch.norm(learned_reward.linear.weight).item()
-            # Evaluation
-            cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
-
-            eval_cross_entropies.append(cross_entropy)
-            optimal_learned_reward, optimal_true_reward = get_optimal_traj(
-                learned_reward, test_traj_embeds, test_traj_true_rewards
-            )
-            optimal_learned_rewards.append(optimal_learned_reward)
-            optimal_true_rewards.append(optimal_true_reward)
+        eval_cross_entropies.append(cross_entropy)
+        optimal_learned_reward, optimal_true_reward = get_optimal_traj(
+            learned_reward, test_traj_embeds, test_traj_true_rewards
+        )
+        optimal_learned_rewards.append(optimal_learned_reward)
+        optimal_true_rewards.append(optimal_true_reward)
 
     return_dict = {
         "cross_entropy": eval_cross_entropies,
@@ -738,29 +737,7 @@ def run(args):
     
     else:
         raise ValueError("Invalid method")
-
-    # Plot the results
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-    ax1.plot(noisy_results["cross_entropy"], label="Noisy")
-    ax1.plot(noiseless_results["cross_entropy"], label="Noiseless")
-    ax1.plot([0, len(noisy_results["cross_entropy"])], [test_ce, test_ce], 'k--', label='Ground Truth')
-    print(len(noisy_results["cross_entropy"]))
-    ax1.set_xlabel("Number of Queries")
-    ax1.set_ylabel("Cross-Entropy")
-    ax1.set_title("Feedback, True Dist: Softmax")
-    ax1.legend()
-
-    ax2.plot(noisy_results["optimal_learned_rewards"], label="Noisy, Learned Reward")
-    ax2.plot(noiseless_results["optimal_learned_rewards"], label="Noiseless, Learned Reward")
-    ax2.plot(noisy_results["optimal_true_rewards"], label="True Reward", c="r")
-    ax2.set_xlabel("Number of Queries")
-    ax2.set_ylabel("Reward Value")
-    ax2.set_title("True Reward of Optimal Trajectory")
-    ax2.legend()
-
-    plt.tight_layout()
-    plt.savefig(f"{args.true_reward_dir}/pref_learning/{args.method}_pref.png")
-    plt.show()
+    
 
     postfix_noisy = f"{args.method}_noisy"
     postfix_noiseless = f"{args.method}_noiseless"
@@ -780,9 +757,32 @@ def run(args):
     else:
         postfix_noisy += "_baseline"
         postfix_noiseless += "_baseline"
-
+    
+    # Save the results in .npz files
     save_results(args, noisy_results, postfix=postfix_noisy)
     save_results(args, noiseless_results, postfix=postfix_noiseless)
+
+    # Plot the results
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    ax1.plot(noisy_results["cross_entropy"], label="Noisy")
+    ax1.plot(noiseless_results["cross_entropy"], label="Noiseless")
+    ax1.plot([0, len(noisy_results["cross_entropy"])], [test_ce, test_ce], 'k--', label='Ground Truth')
+    ax1.set_xlabel("Number of Queries")
+    ax1.set_ylabel("Cross-Entropy")
+    ax1.set_title("Feedback, True Dist: Softmax")
+    ax1.legend()
+
+    ax2.plot(noisy_results["optimal_learned_rewards"], label="Noisy, Learned Reward")
+    ax2.plot(noiseless_results["optimal_learned_rewards"], label="Noiseless, Learned Reward")
+    ax2.plot(noisy_results["optimal_true_rewards"], label="True Reward", c="r")
+    ax2.set_xlabel("Number of Queries")
+    ax2.set_ylabel("Reward Value")
+    ax2.set_title("True Reward of Optimal Trajectory")
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.savefig(f"{args.true_reward_dir}/pref_learning/{args.method}_pref.png")
+    # plt.show()
 
 
 if __name__ == "__main__":
