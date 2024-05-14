@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
-from lang_pref_learning.pref_learning.pref_dataset import PrefDataset, EvalDataset
+from lang_pref_learning.pref_learning.pref_dataset import LangPrefDataset, CompPrefDataset, EvalDataset
 from lang_pref_learning.pref_learning.utils import feature_aspects
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds
@@ -146,9 +146,104 @@ def get_optimal_traj(learned_reward, traj_embeds, traj_true_rewards):
     return optimal_learned_reward, optimal_true_reward
 
 
-def _pref_learning(
+def comp_pref_learning(
     args,
-    train_dataloader,
+    train_lang_dataloader,
+    test_dataloader,
+    model,
+    nlcomps,
+    greater_nlcomps,
+    less_nlcomps,
+    classified_nlcomps,
+    learned_reward,
+    true_reward,
+    traj_embeds,
+    lang_embeds,
+    test_traj_embeds,
+    test_traj_true_rewards,
+    optimal_traj_feature,
+    optimizer,
+    lr_scheduler=None,
+    DEBUG=False,
+):
+    # TODO: write a new train dataloader
+    # Transform numpy array to torch tensor (improve this with a function)
+    traj_embeds = torch.from_numpy(traj_embeds)
+    eval_cross_entropies = []
+    learned_reward_norms = []
+    sampled_traj_a_embeds, sampled_traj_b_embeds = [], []
+    sampled_labels = []
+    optimal_learned_rewards, optimal_true_rewards = [], []
+    logsigmoid = nn.LogSigmoid()
+    init_ce = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
+    print("Initial Cross Entropy:", init_ce)
+    eval_cross_entropies.append(init_ce)
+
+    optimal_learned_reward, optimal_true_reward = get_optimal_traj(
+        learned_reward, test_traj_embeds, test_traj_true_rewards
+    )
+    optimal_learned_rewards.append(optimal_learned_reward)
+    optimal_true_rewards.append(optimal_true_reward)
+
+    CEloss = nn.CrossEntropyLoss()
+
+    for it, train_lang_data in enumerate(train_lang_dataloader):
+        if it > 100:
+            break
+        traj_a, traj_b, feature_a, feature_b, idx_a, idx_b = train_lang_data
+        traj_a_embed, traj_b_embed = traj_embeds[idx_a], traj_embeds[idx_b]
+        sampled_traj_a_embeds.append(traj_a_embed.view(1, -1))
+        sampled_traj_b_embeds.append(traj_b_embed.view(1, -1))
+
+        true_reward_a = torch.sum(torch.from_numpy(true_reward) * feature_a.numpy())
+        true_reward_b = torch.sum(torch.from_numpy(true_reward) * feature_b.numpy())
+
+        sampled_labels.append(true_reward_a < true_reward_b)
+
+        for i in range(args.num_iterations):
+            pred_rewards_a = learned_reward(torch.concat(sampled_traj_a_embeds, dim=0))
+            pred_rewards_b = learned_reward(torch.concat(sampled_traj_b_embeds, dim=0))
+            pred_rewards = torch.cat([pred_rewards_a, pred_rewards_b], dim=-1)
+
+            labels = torch.tensor(sampled_labels).long()
+
+            assert pred_rewards.shape[0] == labels.shape[0]
+
+            loss = CEloss(pred_rewards, labels)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+    
+        if it % 10 == 0 or it == len(train_lang_dataloader) - 1:
+            print(f"Loss: {loss.item():.4f}, Norm of learned reward: {torch.norm(learned_reward.linear.weight):.4f}")
+            learned_reward_norms.append(torch.norm(learned_reward.linear.weight).item())
+
+            # norm_scale_factor = np.linalg.norm(true_reward) / torch.norm(learned_reward.linear.weight).item()
+            # Evaluation
+            cross_entropy = evaluate(test_dataloader, test_traj_true_rewards, learned_reward, test_traj_embeds)
+
+            eval_cross_entropies.append(cross_entropy)
+            optimal_learned_reward, optimal_true_reward = get_optimal_traj(
+                learned_reward, test_traj_embeds, test_traj_true_rewards
+            )
+            optimal_learned_rewards.append(optimal_learned_reward)
+            optimal_true_rewards.append(optimal_true_reward)
+
+    return_dict = {
+        "cross_entropy": eval_cross_entropies,
+        "learned_reward_norms": learned_reward_norms,
+        "optimal_learned_rewards": optimal_learned_rewards,
+        "optimal_true_rewards": optimal_true_rewards,
+    }
+    return return_dict
+
+
+
+
+def lang_pref_learning(
+    args,
+    train_lang_dataloader,
     test_dataloader,
     model,
     nlcomps,
@@ -187,8 +282,8 @@ def _pref_learning(
     optimal_learned_rewards.append(optimal_learned_reward)
     optimal_true_rewards.append(optimal_true_reward)
 
-    for it, train_data in enumerate(train_dataloader):
-        curr_traj, curr_feature_value, idx = train_data
+    for it, train_lang_data in enumerate(train_lang_dataloader):
+        curr_traj, curr_feature_value, idx = train_lang_data
         curr_traj_embed = traj_embeds[idx]
         sampled_traj_embeds.append(curr_traj_embed.view(1, -1))
         curr_traj_reward = torch.sum(torch.from_numpy(true_reward) * curr_feature_value.numpy())
@@ -280,7 +375,7 @@ def _pref_learning(
             if lr_scheduler is not None:
                 lr_scheduler.step()
                 
-        if it % 10 == 0 or it == len(train_dataloader) - 1:
+        if it % 10 == 0 or it == len(train_lang_dataloader) - 1:
             print(f"Loss: {loss.item():.4f}, Norm of learned reward: {torch.norm(learned_reward.linear.weight):.4f}")
         learned_reward_norms.append(torch.norm(learned_reward.linear.weight).item())
 
@@ -379,18 +474,18 @@ def run(args):
 
     # Load train data
     # TODO: change it back to train
-    train_data_dict = load_data(args, split='train')
-    train_trajs = train_data_dict["trajs"]
-    train_img_obs, train_actions = train_data_dict["traj_img_obs"], train_data_dict["actions"]
+    train_lang_data_dict = load_data(args, split='train')
+    train_trajs = train_lang_data_dict["trajs"]
+    train_img_obs, train_actions = train_lang_data_dict["traj_img_obs"], train_lang_data_dict["actions"]
     train_nlcomps, train_nlcomps_embed = (
-        train_data_dict["nlcomps"],
-        train_data_dict["nlcomp_embeds"],
+        train_lang_data_dict["nlcomps"],
+        train_lang_data_dict["nlcomp_embeds"],
     )
     train_greater_nlcomps, train_less_nlcomps = (
-        train_data_dict["greater_nlcomps"],
-        train_data_dict["less_nlcomps"],
+        train_lang_data_dict["greater_nlcomps"],
+        train_lang_data_dict["less_nlcomps"],
     )
-    train_classified_nlcomps = train_data_dict["classified_nlcomps"]
+    train_classified_nlcomps = train_lang_data_dict["classified_nlcomps"]
 
     train_feature_values = np.array([get_feature_value(traj) for traj in train_trajs])
 
@@ -421,8 +516,12 @@ def run(args):
     test_traj_true_rewards = np.dot(test_feature_values, true_reward)
 
     # Initialize the dataset and dataloader
-    train_dataset = PrefDataset(train_trajs, train_feature_values)
-    train_data = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    train_lang_dataset = LangPrefDataset(train_trajs, train_feature_values)
+    train_lang_data = DataLoader(train_lang_dataset, batch_size=1, shuffle=True)
+    
+    train_comp_dataset = CompPrefDataset(train_trajs, train_feature_values)
+    train_comp_data = DataLoader(train_comp_dataset, batch_size=1, shuffle=True)
+
     test_dataset = EvalDataset(test_trajs)
     test_data = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
@@ -557,50 +656,95 @@ def run(args):
     # Normalize the feature value
     optimal_traj_feature = (optimal_traj_feature - feature_value_means) / feature_value_stds
 
-    noisy_results = _pref_learning(
-        args,
-        train_data,
-        test_data,
-        model,
-        train_nlcomps,
-        train_greater_nlcomps,
-        train_less_nlcomps,
-        train_classified_nlcomps,
-        learned_reward,
-        true_reward,
-        train_traj_embeds,
-        train_lang_embeds,
-        test_traj_embeds,
-        test_traj_true_rewards,
-        optimal_traj_feature,
-        optimizer,
-    )
+    if args.method == "comp":
+        noisy_results = comp_pref_learning(
+            args,
+            train_comp_data,
+            test_data,
+            model,
+            train_nlcomps,
+            train_greater_nlcomps,
+            train_less_nlcomps,
+            train_classified_nlcomps,
+            learned_reward,
+            true_reward,
+            train_traj_embeds,
+            train_lang_embeds,
+            test_traj_embeds,
+            test_traj_true_rewards,
+            optimal_traj_feature,
+            optimizer,
+        )
 
-    args.use_softmax = False
-    noiseless_results = _pref_learning(
-        args,
-        train_data,
-        test_data,
-        model,
-        train_nlcomps,
-        train_greater_nlcomps,
-        train_less_nlcomps,
-        train_classified_nlcomps,
-        learned_reward_noiseless,
-        true_reward,
-        train_traj_embeds,
-        train_lang_embeds,
-        test_traj_embeds,
-        test_traj_true_rewards,
-        optimal_traj_feature,
-        optimizer_noiseless,
-    )
+        args.use_softmax = False
+        noiseless_results = comp_pref_learning(
+            args,
+            train_comp_data,
+            test_data,
+            model,
+            train_nlcomps,
+            train_greater_nlcomps,
+            train_less_nlcomps,
+            train_classified_nlcomps,
+            learned_reward_noiseless,
+            true_reward,
+            train_traj_embeds,
+            train_lang_embeds,
+            test_traj_embeds,
+            test_traj_true_rewards,
+            optimal_traj_feature,
+            optimizer_noiseless,
+        )
+
+    elif args.method == "lang":
+        noisy_results = lang_pref_learning(
+            args,
+            train_lang_data,
+            test_data,
+            model,
+            train_nlcomps,
+            train_greater_nlcomps,
+            train_less_nlcomps,
+            train_classified_nlcomps,
+            learned_reward,
+            true_reward,
+            train_traj_embeds,
+            train_lang_embeds,
+            test_traj_embeds,
+            test_traj_true_rewards,
+            optimal_traj_feature,
+            optimizer,
+        )
+
+        args.use_softmax = False
+        noiseless_results = lang_pref_learning(
+            args,
+            train_lang_data,
+            test_data,
+            model,
+            train_nlcomps,
+            train_greater_nlcomps,
+            train_less_nlcomps,
+            train_classified_nlcomps,
+            learned_reward_noiseless,
+            true_reward,
+            train_traj_embeds,
+            train_lang_embeds,
+            test_traj_embeds,
+            test_traj_true_rewards,
+            optimal_traj_feature,
+            optimizer_noiseless,
+        )
+    
+    else:
+        raise ValueError("Invalid method")
 
     # Plot the results
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
     ax1.plot(noisy_results["cross_entropy"], label="Noisy")
     ax1.plot(noiseless_results["cross_entropy"], label="Noiseless")
     ax1.plot([0, len(noisy_results["cross_entropy"])], [test_ce, test_ce], 'k--', label='Ground Truth')
+    print(len(noisy_results["cross_entropy"]))
     ax1.set_xlabel("Number of Queries")
     ax1.set_ylabel("Cross-Entropy")
     ax1.set_title("Feedback, True Dist: Softmax")
@@ -615,11 +759,11 @@ def run(args):
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig(f"{args.true_reward_dir}/pref_learning/lang_pref.png")
+    plt.savefig(f"{args.true_reward_dir}/pref_learning/{args.method}_pref.png")
     plt.show()
 
-    postfix_noisy = "noisy"
-    postfix_noiseless = "noiseless"
+    postfix_noisy = f"{args.method}_noisy"
+    postfix_noiseless = f"{args.method}_noiseless"
     if args.use_other_feedback:
         postfix_noisy += "_other_feedback_" + str(args.num_other_feedback)
         postfix_noiseless += "_other_feedback_" + str(args.num_other_feedback)
@@ -644,6 +788,7 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
 
+    parser.add_argument("--env", type=str, default="robosuite", help="")
     parser.add_argument("--data-dir", type=str, default="data", help="")
     parser.add_argument("--model-dir", type=str, default="models", help="")
     parser.add_argument(
@@ -725,6 +870,12 @@ if __name__ == "__main__":
         "--adaptive-weights",
         action="store_true",
         help="whether to use adaptive weights",
+    )
+    parser.add_argument(
+        "--method",
+        default="lang",
+        type=str,
+        choices=["lang", "comp"],
     )
 
     args = parser.parse_args()

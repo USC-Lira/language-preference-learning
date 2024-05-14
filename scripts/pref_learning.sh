@@ -1,6 +1,7 @@
 python lang_pref_learning/pref_learning/pref_based_learning.py \
---data-dir=data/data-pref-learning \
---model-dir=exp/raw-img-cnn-t5-small-traj-reg-loss-2e-2-margin-1_20240429_191215_lr_0.001_schedule_False \
+--method=lang \
+--data-dir=data/data_pref_learning \
+--model-dir=exp/robosuite-img-obs-t5-small_20240508_211847_lr_0.001_schedule_False \
 --true-reward-dir=lang_pref_learning/pref_learning/true_rewards/$1 \
 --traj-encoder=cnn \
 --lang-model=t5-small --use-bert-encoder \
@@ -9,6 +10,5 @@ python lang_pref_learning/pref_learning/pref_based_learning.py \
 --weight-decay=0.1 \
 --num-iterations=1 \
 --use-softmax \
---use-other-feedback --num-other-feedback=10 \
 --lang-temp=1.0 --use-constant-temp \
---use-img-obs
+--use-img-obs --use-other-feedback --num-other-feedback=10 \

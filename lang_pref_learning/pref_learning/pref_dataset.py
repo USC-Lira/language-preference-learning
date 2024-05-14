@@ -29,9 +29,8 @@ class CompPrefDataset(Dataset):
     def __getitem__(self, idx):
         traj_a_idx, traj_b_idx = self.traj_pairs[idx]
         traj_a, traj_b = self.trajs[traj_a_idx], self.trajs[traj_b_idx]
-        feature_a_idx, feature_b_idx = self.feature_pairs[idx]
-        feature_a, feature_b = self.feature_values[feature_a_idx], self.feature_values[feature_b_idx]
-        return traj_a, traj_b, feature_a, feature_b, traj_a_idx, traj_b_idx, feature_a_idx, feature_b_idx
+        feature_a, feature_b = self.feature_values[traj_a_idx], self.feature_values[traj_b_idx]
+        return traj_a, traj_b, feature_a, feature_b, traj_a_idx, traj_b_idx
 
 
 class EvalDataset(Dataset):

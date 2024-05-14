@@ -3,7 +3,7 @@ import torch
 
 from einops import rearrange
 
-from data.utils import OBJECT_STATE_DIM, PROPRIO_STATE_DIM
+from data.utils import RS_OBJECT_STATE_DIM, RS_PROPRIO_STATE_DIM
 
 
 def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, 
@@ -36,10 +36,9 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder,
             img_obs = rearrange(img_obs, 'b t h w c -> b t c h w')
 
         trajs_inputs['img_obs'] = torch.from_numpy(img_obs).float()
-        trajs_inputs['state'] =  torch.from_numpy(
-            trajs[:, :, OBJECT_STATE_DIM:OBJECT_STATE_DIM + PROPRIO_STATE_DIM]
+        trajs_inputs['states'] = torch.from_numpy(
+            trajs[:, :, RS_OBJECT_STATE_DIM:]
             ).float()
-        trajs_inputs['actions'] = torch.from_numpy(actions).float()
 
     # Process the trajs in batches
     trajs_embeds = []
