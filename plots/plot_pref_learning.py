@@ -15,7 +15,7 @@ def combine_results(results, total_results):
     return total_results
 
 
-def load_results(base_data_dir, postfix):
+def load_results(base_data_dir, method, postfix):
     total_noisy_results = {
         'all_optimal_true_rewards': [],
         'all_optimal_learned_rewards': [],
@@ -39,8 +39,8 @@ def load_results(base_data_dir, postfix):
 
     for i in range(3):
         data_dir = f'{base_data_dir}/{i}/pref_learning'
-        noisy_results = np.load(f'{data_dir}/noisy_{postfix}.npz')
-        noiseless_results = np.load(f'{data_dir}/noiseless_{postfix}.npz')
+        noisy_results = np.load(f'{data_dir}/{method}_noisy_{postfix}.npz')
+        noiseless_results = np.load(f'{data_dir}/{method}_noiseless_{postfix}.npz')
 
         total_noisy_results = get_data(noisy_results, total_noisy_results)
         total_noiseless_results = get_data(noiseless_results, total_noiseless_results)
@@ -55,9 +55,9 @@ def load_results(base_data_dir, postfix):
 
 
 def plot(base_data_dir):
-    noisy_results_baseline, noiseless_results_baseline = load_results(base_data_dir, 'baseline')
-    noisy_results_other_feedback, noiseless_results_other_feedback = load_results(base_data_dir,
-                                                                                  'other_feedback_10_temp_1.0')
+    noisy_results_baseline, noiseless_results_baseline = load_results(base_data_dir, 'comp', 'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
+    noisy_results_other_feedback, noiseless_results_other_feedback = load_results(base_data_dir, 'lang',
+                                                                                  'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
     # noisy_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos = load_results(base_data_dir,
     #                                                                                                       'other_feedback_10_temp_cos_lc_1.0')
     # noisy_results_other_feedback_10_temp_cos_lc, noiseless_results_other_feedback_10_temp_cos_lc = load_results(
@@ -68,7 +68,7 @@ def plot(base_data_dir):
 
     all_noisy_results = [noisy_results_baseline, noisy_results_other_feedback]
     all_noiseless_results = [noiseless_results_baseline, noiseless_results_other_feedback]
-    labels = ["Baseline", "Constant Temperature"]
+    labels = ["Pair-wise", "Language"]
     # all_noisy_results = [noisy_results_other_feedback_10_temp_cos, noisy_results_other_feedback_10_temp_cos_lc,
     #                      noisy_results_lc_1_5, noisy_results_lc_0_8]
     # all_noiseless_results = [noiseless_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos_lc,
@@ -125,5 +125,5 @@ def plot(base_data_dir):
 
 
 if __name__ == '__main__':
-    base_data_dir = '../pref_learning/true_rewards'
+    base_data_dir = '../lang_pref_learning/pref_learning/true_rewards'
     plot(base_data_dir)

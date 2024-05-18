@@ -282,6 +282,8 @@ def lang_pref_learning(
     optimal_true_rewards.append(optimal_true_reward)
 
     for it, train_lang_data in enumerate(train_lang_dataloader):
+        if it > 100:
+            break
         curr_traj, curr_feature_value, idx = train_lang_data
         curr_traj_embed = traj_embeds[idx]
         sampled_traj_embeds.append(curr_traj_embed.view(1, -1))
@@ -739,8 +741,8 @@ def run(args):
         raise ValueError("Invalid method")
     
 
-    postfix_noisy = f"{args.method}_noisy"
-    postfix_noiseless = f"{args.method}_noiseless"
+    postfix_noisy = f"{args.method}_noisy_lr_{args.lr}"
+    postfix_noiseless = f"{args.method}_noiseless_lr_{args.lr}"
     if args.use_other_feedback:
         postfix_noisy += "_other_feedback_" + str(args.num_other_feedback)
         postfix_noiseless += "_other_feedback_" + str(args.num_other_feedback)
@@ -751,9 +753,6 @@ def run(args):
             postfix_noisy += "_temp_cos" + f"_lc_{args.lang_loss_coeff}"
             postfix_noiseless += "_temp_cos" + f"_lc_{args.lang_loss_coeff}"
 
-        if args.adaptive_weights:
-            postfix_noisy += "_adaptive_weights"
-            postfix_noiseless += "_adaptive_weights"
     else:
         postfix_noisy += "_baseline"
         postfix_noiseless += "_baseline"
