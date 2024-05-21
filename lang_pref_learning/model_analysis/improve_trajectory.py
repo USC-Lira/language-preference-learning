@@ -12,7 +12,6 @@ from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_lang_embed
 
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 

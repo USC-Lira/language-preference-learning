@@ -14,95 +14,55 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
-from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_lang_embed
+from lang_pref_learning.model_analysis.utils import get_traj_embeds, get_lang_embed
+from lang_pref_learning.real_robot_exp.utils import replay_trajectory_robot, replay_trajectory_video, remove_special_characters
 
-from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
+from data.utils import speed_wx, distance_to_pan_wx, distance_to_spoon_wx
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 
 
 def get_feature_value(traj, traj_mean=False):
     # Get feature values for each timestep
     if traj_mean:
-        features_values = np.array([gt_reward(traj), speed(traj), height(traj), distance_to_cube(traj),
-                                    distance_to_bottle(traj)])
+        features_values = np.array([speed_wx(traj), distance_to_pan_wx(traj), distance_to_spoon_wx(traj)])
         return features_values
 
     else:
         feature_values = [
-            [gt_reward(state), speed(state), height(state), distance_to_cube(state), distance_to_bottle(state)]
-            for state in traj]
+            [speed_wx(state), distance_to_pan_wx(state), distance_to_spoon_wx(state)]
+            for state in traj
+            ]
         return np.mean(feature_values, axis=0)
 
 
-def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds, softmax=False):
-    if softmax:
-        cos_sim = np.dot(lang_embeds, optimal_traj_embed - curr_traj_embed) / (
-                np.linalg.norm(lang_embeds, axis=1) * np.linalg.norm(optimal_traj_embed - curr_traj_embed))
-        cos_sim = torch.from_numpy(cos_sim)
-        probs = torch.softmax(cos_sim, dim=0)
-        # add some noise to the probabilities
-        probs = probs + torch.randn_like(probs) * 1e-5
-        # sample a language comparison with the probabilities
-        idx = torch.multinomial(probs, 1).item()
-    else:
-        dot_product = np.dot(lang_embeds, optimal_traj_embed - curr_traj_embed)
-        idx = np.argmax(dot_product)
-    return lang_embeds[idx], idx
-
-
-def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, reward_function, less_feature_idx,
-                      greater_nlcomps, less_nlcomps, all_nlcomps, softmax=False):
-    # Based on the reward function, determine which feature aspect to improve
-    feature_diff = optimal_traj_feature_value - curr_traj_feature_value
-    reward_diff = np.multiply(feature_diff, reward_function)
-    if softmax:
-        feature_probs = torch.softmax(torch.from_numpy(reward_diff), dim=0)
-        feature_aspect = torch.multinomial(feature_probs, 1).item()
-    else:
-        feature_aspect = np.argmax(np.abs(reward_diff))
-
-    feature_names = ["gt_reward", "speed", "height", "distance_to_cube", "distance_to_bottle"]
-    if feature_aspect in less_feature_idx:
-        # If the feature aspect is less than the optimal trajectory, then the language comparison should be greater
-        nlcomp = np.random.choice(less_nlcomps[feature_names[feature_aspect]])
-    else:
-        # If the feature aspect is greater than the optimal trajectory, then the language comparison should be less
-        nlcomp = np.random.choice(greater_nlcomps[feature_names[feature_aspect]])
-    return nlcomp, all_nlcomps.index(nlcomp)
-
-
-def improve_trajectory_human(feature_values, less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, traj_embeds, lang_embeds,
-                       model, device, tokenizer, lang_encoder, args, use_softmax=False):
+def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, device, tokenizer, lang_encoder, args):
     # Normalize reward values to be between 0 and 1
+    dummy_reward_func = np.array([-1, -1, -1])
+    reward_values = np.dot(feature_values, dummy_reward_func)
     reward_values = (reward_values - np.min(reward_values)) / (np.max(reward_values) - np.min(reward_values))
 
-    optimal_traj_idx = np.argmax(reward_values)
-    optimal_traj_value = reward_values[optimal_traj_idx]
     curr_traj_idx = np.argmin(reward_values)
     curr_traj_value = reward_values[curr_traj_idx]
     if args.debug:
-        print(f'Optimal trajectory: {optimal_traj_idx}, optimal value: {optimal_traj_value}\n')
         print(f'Initial trajectory: {curr_traj_idx}, initial value: {curr_traj_value}\n')
 
     optimal_reached = False
     traj_values = [curr_traj_value]
     for i in range(args.iterations):
-        if curr_traj_value == optimal_traj_value:
-            optimal_reached = True
-            traj_values.extend([optimal_traj_value for _ in range(args.iterations - i)])
-            break
-        
-        # TODO: Show current trajecotry to the user
 
+        # Show current trajecotry to the user
+        curr_traj_images = traj_images[curr_traj_idx]
+        # replay_trajectory_video(curr_traj_images, frame_rate=10)
+        # replay_trajectory_robot(robot, trajs[curr_traj_idx])
 
 
         # TODO: Get the feedback from the users
-        nlcomp = None
-        lang_embed = None
-        # lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
-        #                             lang_model=lang_encoder)
+        nlcomp = input(f'\nPlease enter the language feedback: ')
+        # remove whitespace and from the input
+        nlcomp = nlcomp.strip()
+
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
+                                    lang_model=lang_encoder)
         next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         # next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_value = reward_values[next_traj_idx]
@@ -118,7 +78,7 @@ def improve_trajectory_human(feature_values, less_idx, greater_nlcomps, less_nlc
             print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
             print(f'Language comparison: {nlcomp}\n')
 
-    return optimal_reached, optimal_traj_value, traj_values
+    return optimal_reached, traj_values
 
 
 def plot_results(optimal_traj_values, all_traj_values, postfix):
@@ -140,11 +100,6 @@ def main(args):
     if args.use_image_obs:
         traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
         actions = np.load(os.path.join(args.data_dir, 'test/actions.npy'))
-    
-    # Use all language comparisons we have in the train, val, and test sets
-    nlcomps = json.load(open(os.path.join(args.data_dir, 'all_unique_nlcomps.json'), 'rb'))
-    greater_nlcomps = json.load(open(os.path.join(args.data_dir, 'all_greater_nlcomps.json'), 'rb'))
-    less_nlcomps = json.load(open(os.path.join(args.data_dir, 'all_less_nlcomps.json'), 'rb'))
 
     # Load the model
     if args.use_bert_encoder:
@@ -160,19 +115,11 @@ def main(args):
         tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model])
         feature_dim = 128
 
-    if args.env == "robosuite":
-        STATE_OBS_DIM = RS_STATE_OBS_DIM
-        ACTION_DIM = RS_ACTION_DIM
-        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
-    elif args.env == "widowx":
+    if args.env == "widowx":
         STATE_OBS_DIM = WidowX_STATE_OBS_DIM
         ACTION_DIM = WidowX_ACTION_DIM
         PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
         OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
-    elif args.env == "metaworld":
-        # TODO: fill in the dimensions for metaworld
-        pass
     else:
         raise ValueError("Invalid environment")
 
@@ -202,11 +149,10 @@ def main(args):
     model.eval()
 
     # Get embeddings for the trajectories and language comparisons
-    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
-                                                    use_img_obs=args.use_image_obs,
-                                                    img_obs=traj_img_obs,
-                                                    actions=actions,
-                                                    )
+    traj_embeds = get_traj_embeds(trajs, model, device, args.use_bert_encoder, tokenizer,
+                                                use_img_obs=args.use_image_obs,
+                                                img_obs=traj_img_obs,
+                                                actions=actions)
 
     # Find the optimal trajectory given the reward function
     feature_values = np.array([get_feature_value(traj) for traj in trajs])
@@ -219,16 +165,10 @@ def main(args):
     for i in less_idx:
         feature_values[:, i] = 1 - feature_values[:, i]
 
-    optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory_human(feature_values,
-                                                                                        less_idx,
-                                                                                        greater_nlcomps, less_nlcomps,
-                                                                                        nlcomps, traj_embeds,
-                                                                                        lang_embeds, model, device,
-                                                                                        tokenizer,
-                                                                                        lang_encoder, args,
-                                                                                        use_softmax=False)
+    improve_trajectory_human(feature_values, traj_embeds, traj_img_obs, 
+                             model, device, tokenizer, lang_encoder, args)
 
-    return optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax
+    return
 
 
 if __name__ == '__main__':

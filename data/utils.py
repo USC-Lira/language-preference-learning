@@ -352,3 +352,30 @@ def distance_to_cube(gym_obs):
 
     gripper_to_cube_pos = object_state[7:10]
     return np.linalg.norm(gripper_to_cube_pos, 2)
+
+
+def speed_wx(gym_obs):
+    assert len(gym_obs) == WidowX_STATE_OBS_DIM or len(
+        gym_obs) == WidowX_STATE_OBS_DIM + WidowX_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    proprio_state = gym_obs[0:WidowX_PROPRIO_STATE_DIM]
+
+    return np.linalg.norm(proprio_state[0:3], 2)  # Returning L2 norm of the gripper q-velocities as the speed.
+
+def distance_to_pan_wx(gym_obs):
+    assert len(gym_obs) == WidowX_STATE_OBS_DIM or len(
+        gym_obs) == WidowX_STATE_OBS_DIM + WidowX_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    proprio_state = gym_obs[0:WidowX_PROPRIO_STATE_DIM]
+
+    pan_pos = np.array([0.395, 0.065])
+    gripper_to_pan_pos = proprio_state[:2] - pan_pos
+    return np.linalg.norm(gripper_to_pan_pos, 2)
+
+
+def distance_to_spoon_wx(gym_obs):
+    assert len(gym_obs) == WidowX_STATE_OBS_DIM or len(
+        gym_obs) == WidowX_STATE_OBS_DIM + WidowX_ACTION_DIM  # Ensure that we are using the right observation (STATE_OBS_DIM) or observation+action (STATE_OBS_DIM+ACTION_DIM) space.
+    proprio_state = gym_obs[0:WidowX_PROPRIO_STATE_DIM]
+
+    spoon_pos = np.array([0.44198237, 0.0728401 , 0.28102552])
+    gripper_to_spoon_pos = proprio_state[:3] - spoon_pos
+    return np.linalg.norm(gripper_to_spoon_pos, 2)

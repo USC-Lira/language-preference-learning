@@ -78,6 +78,46 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder,
     return traj_embeds, lang_embeds
 
 
+def get_traj_embeds(trajs, model, device, use_img_obs=False, img_obs=None):
+    """
+    Get the trajectory embeddings for the given trajs
+
+    Args:
+        - trajs (np.ndarray): Trajectories to get embeddings for
+        - model (nn.Module): Model to extract embeddings
+        - device (torch.device): Device to use for computation
+        - use_img_obs (bool): Whether to use image observations
+        - img_obs (np.ndarray): Image observations for the trajs
+    
+    Returns:
+        - traj_embeds (np.ndarray): Trajectory embeddings
+    """
+    trajs_inputs = {
+        'trajs': torch.from_numpy(trajs).float().to(device),
+    }
+    if use_img_obs:
+        if img_obs.shape[-1] == 3:
+            img_obs = rearrange(img_obs, 'b t h w c -> b t c h w')
+
+        trajs_inputs['img_obs'] = torch.from_numpy(img_obs).float()
+        trajs_inputs['states'] = torch.from_numpy(
+            trajs[:, :, RS_OBJECT_STATE_DIM:]
+            ).float()
+
+    # Process the trajs in batches
+    trajs_embeds = []
+    batch_size = 8
+    for i in range(0, len(trajs), batch_size):
+        batch_trajs_inputs = {k: v[i:i + batch_size].to(device) for k, v in trajs_inputs.items()}
+        batch_encoded_trajs = model.traj_encoder(batch_trajs_inputs)
+        batch_trajs_embeds = torch.mean(batch_encoded_trajs, dim=-2, keepdim=False).detach().cpu().numpy()
+        trajs_embeds.append(batch_trajs_embeds)
+
+    traj_embeds = np.concatenate(trajs_embeds, axis=0)
+
+    return traj_embeds
+
+
 def get_lang_embed(nlcomp, model, device, tokenizer, preprocessed=False, lang_model=None):
     if not preprocessed:
         assert lang_model is not None
