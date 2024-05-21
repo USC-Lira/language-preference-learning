@@ -5,3 +5,4 @@ torchaudio==0.12.1
 transformers==4.35.1
 matplotlib == 3.7.5
 einops == 0.8.0
+opencv-python==4.1.2.30
