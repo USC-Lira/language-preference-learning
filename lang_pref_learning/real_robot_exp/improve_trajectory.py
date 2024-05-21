@@ -14,7 +14,7 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
-from lang_pref_learning.model_analysis.utils import get_traj_embeds, get_lang_embed
+from lang_pref_learning.model_analysis.utils import get_traj_embeds_wx, get_lang_embed
 from lang_pref_learning.real_robot_exp.utils import replay_trajectory_robot, replay_trajectory_video, remove_special_characters
 
 from data.utils import speed_wx, distance_to_pan_wx, distance_to_spoon_wx
@@ -52,17 +52,23 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
 
         # Show current trajecotry to the user
         curr_traj_images = traj_images[curr_traj_idx]
-        # replay_trajectory_video(curr_traj_images, frame_rate=10)
+        replay_trajectory_video(curr_traj_images, frame_rate=10)
         # replay_trajectory_robot(robot, trajs[curr_traj_idx])
-
+        
+        satisfied = input(f'\nAre you satisfied with the current trajectory? (y/n): ')
+        satisfied = satisfied.strip().lower()
+        if satisfied == 'y':
+            optimal_reached = True
+            print(f'\nOptimal trajectory reached at iteration {i}!')
+            break
+        
 
         # TODO: Get the feedback from the users
         nlcomp = input(f'\nPlease enter the language feedback: ')
         # remove whitespace and from the input
-        nlcomp = nlcomp.strip()
+        nlcomp = remove_special_characters(nlcomp)
 
-        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
-                                    lang_model=lang_encoder)
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
         next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         # next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_value = reward_values[next_traj_idx]
@@ -81,28 +87,14 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
     return optimal_reached, traj_values
 
 
-def plot_results(optimal_traj_values, all_traj_values, postfix):
-    plt.figure()
-    plt.plot(np.mean(all_traj_values, axis=0), label='Improved Trajectory')
-    # Draw optimal trajecotry values as a dashed horizontal line
-    plt.plot([0, args.iterations], [np.mean(optimal_traj_values), np.mean(optimal_traj_values)], 'k--', label='Optimal Trajectory')
-    plt.xlabel('Iteration')
-    plt.ylabel('Avg. Reward')
-    plt.title('Average Reward vs. Iteration (Test Set)')
-    plt.legend()
-    
-    plt.savefig(f'model_analysis/{exp_name}/improve_traj_{postfix}.png')
-    # plt.show()
-
 
 def main(args):
     trajs = np.load(os.path.join(args.data_dir, 'test/trajs.npy'))
     if args.use_image_obs:
         traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
-        actions = np.load(os.path.join(args.data_dir, 'test/actions.npy'))
 
     # Load the model
-    if args.use_bert_encoder:
+    if args.use_lang_encoder:
         if 't5' in args.lang_model:
             lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
         else:
@@ -128,7 +120,7 @@ def main(args):
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
                               preprocessed_nlcomps=args.preprocessed_nlcomps,
                               lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
-                              use_bert_encoder=args.use_bert_encoder, 
+                              use_bert_encoder=args.use_lang_encoder, 
                               traj_encoder=args.traj_encoder
                               )
 
@@ -149,21 +141,15 @@ def main(args):
     model.eval()
 
     # Get embeddings for the trajectories and language comparisons
-    traj_embeds = get_traj_embeds(trajs, model, device, args.use_bert_encoder, tokenizer,
-                                                use_img_obs=args.use_image_obs,
-                                                img_obs=traj_img_obs,
-                                                actions=actions)
+    traj_embeds = get_traj_embeds_wx(trajs, model, device,
+                                  use_img_obs=args.use_image_obs, 
+                                  img_obs=traj_img_obs)
 
     # Find the optimal trajectory given the reward function
     feature_values = np.array([get_feature_value(traj) for traj in trajs])
     # Normalize feature values
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
             np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
-
-    # Randomly select some features and set their values to 1 - original value
-    less_idx = np.random.choice(5, size=2, replace=False)
-    for i in less_idx:
-        feature_values[:, i] = 1 - feature_values[:, i]
 
     improve_trajectory_human(feature_values, traj_embeds, traj_img_obs, 
                              model, device, tokenizer, lang_encoder, args)
@@ -173,9 +159,11 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
+
+    parser.add_argument('--env', type=str, default='widowx')
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
     parser.add_argument('--data-dir', type=str, default='data')
-    parser.add_argument('--use-bert-encoder', action='store_true')
+    parser.add_argument('--use-lang-encoder', action='store_true')
     parser.add_argument('--lang-model', type=str, default='bert-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
@@ -193,34 +181,4 @@ if __name__ == '__main__':
     # Set seed
     np.random.seed(args.seed)
 
-    exp_name = args.model_dir.split('/')[-1]
-    optimal_traj_values_softmax = []
-    all_traj_values_softmax = []
-    optimal_traj_values_argmax = []
-    all_traj_values_argmax = []
-    for i in range(args.num_trails):
-        if i % 10 == 0:
-            print(f'Attempt {i}')
-        optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax = main(args)
-        optimal_traj_values_softmax.append(optimal_traj_value_softmax)
-        all_traj_values_softmax.append(traj_values_softmax)
-        optimal_traj_values_argmax.append(optimal_traj_value_argmax)
-        all_traj_values_argmax.append(traj_values_argmax)
-
-    all_traj_values_argmax = np.array(all_traj_values_argmax)
-    all_traj_values_softmax = np.array(all_traj_values_softmax)
-    optimal_traj_values_argmax = np.array(optimal_traj_values_argmax)
-    optimal_traj_values_softmax = np.array(optimal_traj_values_softmax)
-
-    save_dir = os.path.join('model_analysis', exp_name)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    np.save(f'{save_dir}/all_traj_values_softmax.npy', all_traj_values_softmax)
-    np.save(f'{save_dir}/optimal_traj_values_softmax.npy', optimal_traj_values_softmax)
-    np.save(f'{save_dir}/all_traj_values_argmax.npy', all_traj_values_argmax)
-    np.save(f'{save_dir}/optimal_traj_values_argmax.npy', optimal_traj_values_argmax)
-
-
-    plot_results(optimal_traj_values_softmax, all_traj_values_softmax, 'softmax')
-    plot_results(optimal_traj_values_argmax, all_traj_values_argmax, 'argmax')
+    main(args)

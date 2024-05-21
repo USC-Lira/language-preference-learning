@@ -22,8 +22,13 @@ def replay_trajectory_video(traj_images, frame_rate=10):
     """
     n_frames, h, w, c = traj_images.shape
 
+    # resize the images to a common size
+
     for i in range(n_frames):
         frame = traj_images[i]
+
+        frame = cv2.resize(frame, (640, 480))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         cv2.imshow('Current Trajectory', frame)
 

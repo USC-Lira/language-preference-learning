@@ -3,7 +3,7 @@ import torch
 
 from einops import rearrange
 
-from data.utils import RS_OBJECT_STATE_DIM, RS_PROPRIO_STATE_DIM
+from data.utils import RS_OBJECT_STATE_DIM, RS_PROPRIO_STATE_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 
 
 def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, 
@@ -78,7 +78,7 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder,
     return traj_embeds, lang_embeds
 
 
-def get_traj_embeds(trajs, model, device, use_img_obs=False, img_obs=None):
+def get_traj_embeds_wx(trajs, model, device, use_img_obs=False, img_obs=None):
     """
     Get the trajectory embeddings for the given trajs
 
@@ -101,7 +101,7 @@ def get_traj_embeds(trajs, model, device, use_img_obs=False, img_obs=None):
 
         trajs_inputs['img_obs'] = torch.from_numpy(img_obs).float()
         trajs_inputs['states'] = torch.from_numpy(
-            trajs[:, :, RS_OBJECT_STATE_DIM:]
+            trajs[:, :, WidowX_OBJECT_STATE_DIM: ]
             ).float()
 
     # Process the trajs in batches
@@ -119,7 +119,7 @@ def get_traj_embeds(trajs, model, device, use_img_obs=False, img_obs=None):
 
 
 def get_lang_embed(nlcomp, model, device, tokenizer, preprocessed=False, lang_model=None):
-    if not preprocessed:
+    if preprocessed:
         assert lang_model is not None
         inputs = tokenizer(nlcomp, return_tensors="pt")
         lang_outputs = lang_model(**inputs)
@@ -132,6 +132,8 @@ def get_lang_embed(nlcomp, model, device, tokenizer, preprocessed=False, lang_mo
     else:
         # First tokenize the NL comparison and get the embedding
         inputs = tokenizer(nlcomp, return_tensors="pt")
+        # move inputs to the device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         hidden_states = model.lang_encoder(**inputs).last_hidden_state
         lang_embed = torch.mean(hidden_states, dim=1, keepdim=False).squeeze(0).detach().cpu().numpy()
 
