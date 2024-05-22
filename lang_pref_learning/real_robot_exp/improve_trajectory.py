@@ -5,7 +5,7 @@ Load trajectories -> Start from the worst one -> Get the input from user -> Impr
 
 import matplotlib.pyplot as plt
 import numpy as np
-import json
+import re
 import argparse
 import torch
 import os
@@ -14,8 +14,8 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
-from lang_pref_learning.model_analysis.utils import get_traj_embeds_wx, get_lang_embed
-from lang_pref_learning.real_robot_exp.utils import replay_trajectory_robot, replay_trajectory_video, remove_special_characters
+from lang_pref_learning.real_robot_exp.utils import get_lang_embed, get_traj_embeds_wx
+from lang_pref_learning.real_robot_exp.utils import replay_trajectory_video, remove_special_characters
 
 from data.utils import speed_wx, distance_to_pan_wx, distance_to_spoon_wx
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
@@ -52,7 +52,7 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
 
         # Show current trajecotry to the user
         curr_traj_images = traj_images[curr_traj_idx]
-        replay_trajectory_video(curr_traj_images, frame_rate=10)
+        replay_trajectory_video(curr_traj_images, frame_rate=10, close=True)
         # replay_trajectory_robot(robot, trajs[curr_traj_idx])
         
         satisfied = input(f'\nAre you satisfied with the current trajectory? (y/n): ')
@@ -87,11 +87,37 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
     return optimal_reached, traj_values
 
 
+def load_trajectories(traj_root_dir):
+    traj_root_dir = os.path.join(args.data_dir, 'trajectory')
+    trajs = []
+    traj_images = []
+
+    # Read all trajectory directories by numerical order
+    traj_dirs = os.listdir(traj_root_dir)
+
+    def extract_number(filename):
+        match = re.search(r'\d+', filename)
+        if match:
+            return int(match.group())
+        return None
+    
+    sorted_traj_dirs = sorted(traj_dirs, key=extract_number)
+
+    for traj_dir in sorted_traj_dirs:
+        traj = np.load(os.path.join(traj_root_dir, traj_dir, 'trajs.npy'))
+        traj_img_obs = np.load(os.path.join(traj_root_dir, traj_dir, 'traj_img_obs.npy'))
+        trajs.append(traj)
+        traj_images.append(traj_img_obs)
+
+    return trajs, traj_images
+
+
 
 def main(args):
-    trajs = np.load(os.path.join(args.data_dir, 'test/trajs.npy'))
-    if args.use_image_obs:
-        traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
+    # trajs = np.load(os.path.join(args.data_dir, 'trajs.npy'))
+    # if args.use_image_obs:
+    #     traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
+    trajs, traj_img_obs = load_trajectories(args.data_dir)
 
     # Load the model
     if args.use_lang_encoder:
