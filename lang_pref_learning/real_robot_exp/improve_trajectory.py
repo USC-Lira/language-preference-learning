@@ -184,7 +184,7 @@ def main(args):
             np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
 
     improve_trajectory_human(feature_values, traj_embeds, traj_img_obs, 
-                             model, device, tokenizer, lang_encoder, args)
+                             model, device, tokenizer, model.lang_encoder, args)
 
     return
 

@@ -20,7 +20,7 @@ from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.pref_learning.pref_dataset import LangPrefDataset, CompPrefDataset, EvalDataset
 from lang_pref_learning.pref_learning.utils import feature_aspects
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
-from lang_pref_learning.real_robot_exp.utils import get_traj_embeds_wx
+from lang_pref_learning.real_robot_exp.utils import get_traj_embeds_wx, get_lang_embed
 from lang_pref_learning.real_robot_exp.improve_trajectory import get_feature_value
 from lang_pref_learning.real_robot_exp.utils import replay_trajectory_video, remove_special_characters
 
@@ -135,6 +135,7 @@ def comp_pref_learning(
 
         traj_a_images, traj_b_images = traj_img_obs[idx_a], traj_img_obs[idx_b]
 
+        print(f"\n...Query {it + 1}...")
         # Replay two trajectories to the user
         replay_trajectory_video(traj_a_images, 
                                 title='Trajectory A',
@@ -144,7 +145,6 @@ def comp_pref_learning(
                                 title='Trajectory B',
                                 frame_rate=10)
         
-        print(f"\nIteration {it + 1}")
         comp_feedback = input("Please choose your preferred one (a or b): ")
 
         receive_input = False
@@ -191,11 +191,9 @@ def lang_pref_learning(
     less_nlcomps,
     classified_nlcomps,
     learned_reward,
-    true_reward,
     traj_embeds,
     traj_img_obs,
     lang_embeds,
-    optimal_traj_feature,
     optimizer,
     device,
     tokenizer,
@@ -210,39 +208,33 @@ def lang_pref_learning(
     learned_reward_norms = []
     all_lang_feedback = []
     all_other_language_feedback_feats = []
+    all_lang_embeds = []
     sampled_traj_embeds = []
     optim_traj_scores = []
     logsigmoid = nn.LogSigmoid()
 
 
     for it, train_lang_data in enumerate(dataloader):
-        if it > 20:
+        if it >= 20:
             break
         curr_traj, curr_feature_value, idx = train_lang_data
         curr_traj_embed = traj_embeds[idx]
         sampled_traj_embeds.append(curr_traj_embed.view(1, -1))
 
+        print(f"\n...Query {it + 1}...")
+
         # get the language feedback from the user
         curr_traj_images = traj_img_obs[idx]
         replay_trajectory_video(curr_traj_images, title='Current Trajectory', frame_rate=10)
-
-        print(f"\nIteration {it + 1}")
         nlcomp = input("Please provide the language feedback: ")
         nlcomp = remove_special_characters(nlcomp)
         lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
-        all_lang_feedback.append(nlcomp)
-
-        # if pos:
-        #     nlcomp = np.random.choice(greater_nlcomps[feature_aspects[feature_aspect_idx]])
-        # else:
-        #     nlcomp = np.random.choice(less_nlcomps[feature_aspects[feature_aspect_idx]])
 
         all_lang_feedback.append(nlcomp)
+        all_lang_embeds.append(lang_embed)
+
         # Get the feature of the language comparison
-        nlcomp_features = torch.concat(
-            [torch.from_numpy(lang_embeds[nlcomps.index(nlcomp)]).view(1, -1) for nlcomp in all_lang_feedback],
-            dim=0,
-        )
+        nlcomp_features = torch.tensor(np.array(all_lang_embeds))
 
         # Randomly sample feedback for other features in the training set
         if args.use_other_feedback:
@@ -508,7 +500,23 @@ def run(args):
         )
 
     elif args.method == "lang":
-        pass
+        lang_pref_learning(
+            args,
+            lang_data,
+            model,
+            None,
+            None,
+            None,
+            None,
+            learned_reward,
+            traj_embeds,
+            traj_img_obs,
+            None,
+            optimizer,
+            device,
+            tokenizer,
+            lang_encoder,
+        )
     
     else:
         raise ValueError("Invalid method")
