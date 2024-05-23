@@ -67,10 +67,11 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
         nlcomp = input(f'\nPlease enter the language feedback: ')
         # remove whitespace and from the input
         nlcomp = remove_special_characters(nlcomp)
+        print(nlcomp)
 
         lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
-        next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
-        # next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
+        # next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
+        next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_value = reward_values[next_traj_idx]
 
         if next_traj_value > curr_traj_value:
@@ -165,11 +166,16 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
-
-    # Get embeddings for the trajectories and language comparisons
-    traj_embeds = get_traj_embeds_wx(trajs, model, device,
-                                  use_img_obs=args.use_image_obs, 
-                                  img_obs=traj_img_obs)
+    
+    # Get trajectory embeddings
+    if not os.path.exists(f'{args.data_dir}/traj_embeds.npy'):
+        traj_embeds = get_traj_embeds_wx(trajs, model, device,
+                                      use_img_obs=args.use_image_obs, 
+                                      img_obs=traj_img_obs)
+        np.save(f'{args.data_dir}/traj_embeds.npy', traj_embeds)
+    else:
+        traj_embeds = np.load(f'{args.data_dir}/traj_embeds.npy')
+    
 
     # Find the optimal trajectory given the reward function
     feature_values = np.array([get_feature_value(traj) for traj in trajs])

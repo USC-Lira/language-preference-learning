@@ -82,6 +82,57 @@ def remove_special_characters(input_string):
     return cleaned_string
 
 
+def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, 
+                         tokenizer=None, nlcomps_bert_embeds=None,
+                         use_img_obs=False, img_obs=None):
+    """
+    Get the trajectory and language embeddings for the given trajs and nlcomps
+
+    Args:
+        - trajs (np.ndarray): Trajectories to get embeddings for
+        - nlcomps (List[str]): Natural language comparisons to get embeddings for
+        - model (nn.Module): Model to extract embeddings
+        - device (torch.device): Device to use for computation
+        - use_bert_encoder (bool): Whether to use BERT for language encoding
+        - tokenizer (BertTokenizer): Tokenizer to use for BERT encoding
+        - nlcomps_bert_embeds (List[np.ndarray]): BERT embeddings for the NL comparisons
+        - use_img_obs (bool): Whether to use image observations
+        - img_obs (np.ndarray): Image observations for the trajs
+        - actions (np.ndarray): Actions for the trajs
+    
+    Returns:
+        - traj_embeds (np.ndarray): Trajectory embeddings
+        - lang_embeds (np.ndarray): Language embeddings
+    """
+    traj_embeds = get_traj_embeds_wx(trajs, model, device, use_img_obs, img_obs)
+
+    # Get the nearest trajectory embedding for each language comparison
+    lang_embeds = []
+    if use_bert_encoder:
+        assert tokenizer is not None
+        lang_inputs = tokenizer(
+                nlcomps,
+                padding=True,
+                add_special_tokens=True,
+                return_tensors="pt",
+            )
+        lang_inputs = {k: v.to(device) for k, v in lang_inputs.items()}
+        lang_outputs = model.lang_encoder(**lang_inputs)
+        emebddings = lang_outputs.last_hidden_state
+        lang_embeds = torch.mean(emebddings, dim=1, keepdim=False).detach().cpu().numpy()
+
+    else:
+        assert nlcomps_bert_embeds is not None
+        for i, nlcomp_bert_embed in enumerate(nlcomps_bert_embeds):
+            lang_embed = model.lang_encoder(
+                torch.from_numpy(nlcomp_bert_embed).float().to(device)).detach().cpu().numpy()
+            lang_embeds.append(lang_embed)
+
+    lang_embeds = np.array(lang_embeds)
+
+    return traj_embeds, lang_embeds
+
+
 def get_lang_embed(nlcomp, model, device, tokenizer, preprocessed=False, lang_model=None):
     if preprocessed:
         assert lang_model is not None

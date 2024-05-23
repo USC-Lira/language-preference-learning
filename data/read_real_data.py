@@ -5,6 +5,8 @@ import pickle
 from PIL import Image
 from collections import defaultdict
 
+from data.make_dataset_avoid_danger import downsample
+
 
 def read_single_traj(traj_dir):
     """
@@ -83,7 +85,6 @@ def read_all_traj(data_root_dir, save_root_dir):
     Returns:
         - all_trajs: list, a list of trajectories
     """
-    all_trajs = []
     traj_id = 0
     traj_labels_dict = defaultdict(list)
 
@@ -97,7 +98,7 @@ def read_all_traj(data_root_dir, save_root_dir):
                 traj_labels_dict[label].append(traj_id)
             
             traj_data = read_single_traj(dirpath)
-            traj_save_dir = os.path.join(save_dir, f"trajectory/traj{traj_id}")
+            traj_save_dir = os.path.join(save_dir, f"trajectory/{parts[-1]}")
             os.makedirs(traj_save_dir, exist_ok=True)
             np.save(os.path.join(traj_save_dir, "trajs.npy"), traj_data["states"])
             np.save(os.path.join(traj_save_dir, "actions.npy"), traj_data["actions"])
@@ -112,12 +113,12 @@ def read_all_traj(data_root_dir, save_root_dir):
     with open(os.path.join(save_root_dir, "traj_labels.pkl"), "wb") as f:
         pickle.dump(traj_labels_dict, f)
 
-    return all_trajs
+    return
 
 
 if __name__ == "__main__":
-    data_dir = "dataset_avoid_danger"
-    save_dir = "data_avoid_danger"
+    data_dir = "avoid_danger_user_study_raw"
+    save_dir = "avoid_danger_user_study"
 
     read_all_traj(data_dir, save_dir)
     
