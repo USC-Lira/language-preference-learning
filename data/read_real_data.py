@@ -72,7 +72,7 @@ def read_single_traj(traj_dir):
     images = np.concatenate(images, axis=0)
     images = images[:-1, :, :, :]  # Remove the last image
 
-    return {"states": states, "actions": actions, "images": images}
+    return {"states": states, "actions": actions, "images": images, 'policy_out': policy_out}
 
 
 def read_all_traj(data_root_dir, save_root_dir):
@@ -103,6 +103,8 @@ def read_all_traj(data_root_dir, save_root_dir):
             np.save(os.path.join(traj_save_dir, "trajs.npy"), traj_data["states"])
             np.save(os.path.join(traj_save_dir, "actions.npy"), traj_data["actions"])
             np.save(os.path.join(traj_save_dir, "traj_img_obs.npy"), traj_data["images"])
+            with open(os.path.join(traj_save_dir, "policy_out.pkl"), "wb") as f:
+                pickle.dump(traj_data['policy_out'], f)
 
             traj_id += 1
 

@@ -8,6 +8,7 @@ import numpy as np
 import re
 import argparse
 import torch
+import pickle
 import os
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
@@ -19,6 +20,49 @@ from lang_pref_learning.real_robot_exp.utils import replay_trajectory_video, rem
 
 from data.utils import speed_wx, distance_to_pan_wx, distance_to_spoon_wx
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+
+try:
+    import time
+    import rospy
+    import pickle as pkl
+
+    from multicam_server.topic_utils import IMTopic
+    from widowx_envs.widowx_env import WidowXEnv
+
+    env_params = {
+    'camera_topics': [IMTopic('/blue/image_raw')
+                      ],
+    'gripper_attached': 'custom',
+    'skip_move_to_neutral': True,
+    'move_to_rand_start_freq': -1,
+    'fix_zangle': 0.1,
+    'move_duration': 0.2,
+    'adaptive_wait': True,
+    'action_clipping': None
+}
+    
+except ImportError as e:
+    print(e)
+
+
+def replay_widowx(env, policy_dict):
+    actions = np.stack([d['actions'] for d in policy_dict], axis=0)
+
+    last_tstep = time.time()
+
+    env._controller.open_gripper(True)
+    env.move_to_neutral()
+
+    for action in actions:
+        env.step(action)
+        # t = time.time()
+        # while True:
+        #     if t - last_tstep > env_params['move_duration']:
+        #         print(f'loop {t - last_tstep}s')
+        #         obs = env.step(action)
+        #         obs_imgs.append(obs['images'])
+        #         last_tstep = t
+        #         break
 
 
 def get_feature_value(traj, traj_mean=False):
@@ -35,7 +79,7 @@ def get_feature_value(traj, traj_mean=False):
         return np.mean(feature_values, axis=0)
 
 
-def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, device, tokenizer, lang_encoder, args):
+def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_policy_outs, model, device, tokenizer, lang_encoder, args):
     # Normalize reward values to be between 0 and 1
     dummy_reward_func = np.array([-1, -1, -1])
     reward_values = np.dot(feature_values, dummy_reward_func)
@@ -48,18 +92,31 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
 
     optimal_reached = False
     traj_values = [curr_traj_value]
+
+    if args.real_robot:
+        widowx_env = WidowXEnv(env_params)
+        widowx_env.start()
+        widowx_env.move_to_neutral()
+
     for i in range(args.iterations):
+        if i == 0:
+            print(f'Replay Initial Trajecotry.....')
+        else:
+            print(f'Replay Current Trajecotry.....')
 
         # Show current trajecotry to the user
-        curr_traj_images = traj_images[curr_traj_idx]
-        replay_trajectory_video(curr_traj_images, frame_rate=10, close=True)
-        # replay_trajectory_robot(robot, trajs[curr_traj_idx])
+        if args.real_robot:
+            curr_traj_policy_out = traj_policy_outs[curr_traj_idx]
+            replay_widowx(widowx_env, curr_traj_policy_out)
+        else:
+            curr_traj_images = traj_images[curr_traj_idx]
+            replay_trajectory_video(curr_traj_images)
         
         satisfied = input(f'\nAre you satisfied with the current trajectory? (y/n): ')
         satisfied = satisfied.strip().lower()
         if satisfied == 'y':
             optimal_reached = True
-            print(f'\nOptimal trajectory reached at iteration {i}!')
+            print(f'\nOptimal trajectory reached at iteration {i}!\n')
             break
         
 
@@ -72,11 +129,12 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
         lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
         # next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
-        next_traj_value = reward_values[next_traj_idx]
+        curr_traj_idx = next_traj_idx
+        # next_traj_value = reward_values[next_traj_idx]
 
-        if next_traj_value > curr_traj_value:
-            curr_traj_idx = next_traj_idx
-            curr_traj_value = next_traj_value
+        # if next_traj_value > curr_traj_value:
+        #     curr_traj_idx = next_traj_idx
+        #     curr_traj_value = next_traj_value
         
         traj_values.append(curr_traj_value)
 
@@ -85,6 +143,9 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, model, de
             print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
             print(f'Language comparison: {nlcomp}\n')
 
+    widowx_env._controller.open_gripper(True)
+    widowx_env.move_to_neutral()
+
     return optimal_reached, traj_values
 
 
@@ -92,6 +153,7 @@ def load_trajectories(traj_root_dir):
     traj_root_dir = os.path.join(args.data_dir, 'trajectory')
     trajs = []
     traj_images = []
+    traj_policy_outs = []
 
     # Read all trajectory directories by numerical order
     traj_dirs = os.listdir(traj_root_dir)
@@ -109,8 +171,11 @@ def load_trajectories(traj_root_dir):
         traj_img_obs = np.load(os.path.join(traj_root_dir, traj_dir, 'traj_img_obs.npy'))
         trajs.append(traj)
         traj_images.append(traj_img_obs)
+        with open(os.path.join(traj_root_dir, traj_dir, 'policy_out.pkl'), 'rb') as f:
+            policy_out = pickle.load(f)
+            traj_policy_outs.append(policy_out)
 
-    return trajs, traj_images
+    return trajs, traj_images, traj_policy_outs
 
 
 
@@ -118,7 +183,7 @@ def main(args):
     # trajs = np.load(os.path.join(args.data_dir, 'trajs.npy'))
     # if args.use_image_obs:
     #     traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
-    trajs, traj_img_obs = load_trajectories(args.data_dir)
+    trajs, traj_img_obs, traj_policy_outs = load_trajectories(args.data_dir)
 
     # Load the model
     if args.use_lang_encoder:
@@ -183,7 +248,7 @@ def main(args):
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
             np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
 
-    improve_trajectory_human(feature_values, traj_embeds, traj_img_obs, 
+    improve_trajectory_human(feature_values, traj_embeds, traj_img_obs, traj_policy_outs,
                              model, device, tokenizer, model.lang_encoder, args)
 
     return
@@ -208,6 +273,7 @@ if __name__ == '__main__':
                         choices=['mlp', 'cnn'], help='which trajectory encoder to use')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num-trails', type=int, default=10)
+    parser.add_argument('--real-robot', action='store_true')
     args = parser.parse_args()
 
     # Set seed
