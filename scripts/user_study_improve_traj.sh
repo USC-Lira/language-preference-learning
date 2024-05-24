@@ -5,5 +5,4 @@ python -m lang_pref_learning.real_robot_exp.improve_trajectory \
 --use-lang-encoder --lang-model=t5-small \
 --iterations=10 \
 --use-image-obs \
---seed=0 \
---real-robot
+--seed=0

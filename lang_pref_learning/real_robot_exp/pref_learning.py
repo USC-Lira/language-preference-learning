@@ -28,6 +28,9 @@ from lang_pref_learning.real_robot_exp.utils import replay_traj_widowx, replay_t
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 
 
+optimal_candidates = [5, 8, 10, 15, 18, 20, 21, 22, 23, 25, 27, 29]
+
+
 try:
     import time
     import rospy
@@ -156,6 +159,11 @@ def comp_pref_learning(
 
     CEloss = nn.CrossEntropyLoss()
 
+    # import ipdb; ipdb.set_trace()
+    optim_candidates_embeds = traj_embeds[optimal_candidates]
+    optim_candidates_images = [traj_img_obs[i] for i in optimal_candidates]
+    optim_candidates_policy_outs = [traj_policy_outs[i] for i in optimal_candidates]
+
     if args.real_robot:
         widowx_env = WidowXEnv(env_params)
         widowx_env.start()
@@ -171,10 +179,10 @@ def comp_pref_learning(
 
         traj_a_images, traj_b_images = traj_img_obs[idx_a], traj_img_obs[idx_b]
 
-        print(f"\n...Query {it + 1}...")
+        print(f"\n =========== Query {it + 1} ===========")
         # Replay two trajectories to the user
         if args.real_robot:
-            print("Replaying trajectory A on the robot...\n")
+            print("Replaying trajectory A on the robot...")
             traj_policy_out_a = traj_policy_outs[idx_a]
             replay_traj_widowx(widowx_env, traj_policy_out_a)
 
@@ -183,14 +191,14 @@ def comp_pref_learning(
             replay_traj_widowx(widowx_env, traj_policy_out_b)
             
         else:
-            print("Replaying trajectory A...\n")
+            print("Replaying trajectory A...")
             replay_trajectory_video(traj_a_images, 
                                     title='Trajectory A',
-                                    frame_rate=10)
+                                    frame_rate=20)
             print("Replaying trajectory B...\n")
             replay_trajectory_video(traj_b_images, 
                                     title='Trajectory B',
-                                    frame_rate=10)
+                                    frame_rate=20)
         
         comp_feedback = input("Please choose your preferred one (a or b): ")
 
@@ -221,12 +229,33 @@ def comp_pref_learning(
             optimizer.step()
 
         if (it + 1) % 5 == 0:
-            # Show users the best trajectory so far and let them rate it
-            optim_traj_idx = get_optimal_traj(learned_reward, traj_embeds)
-            traj_images = traj_img_obs[optim_traj_idx]
-            replay_trajectory_video(traj_images, title='Optimal Trajectory', frame_rate=10)
-            score = input("Please rate the trajectory (0-5, 5 is the best): ")
-            optim_traj_scores.append(int(score))
+            if it >= 15:
+                # Show users the best trajectory so far and let them rate it
+                optim_traj_idx = get_optimal_traj(learned_reward, optim_candidates_embeds)
+
+                # print(f"Optimal Trajectory Index: {optim_traj_idx}")
+                if args.real_robot:
+                    print("\nReplaying the optimal trajectory on the robot...")
+                    replay_traj_widowx(widowx_env, optim_candidates_policy_outs[optim_traj_idx])
+                else:
+                    print("\nReplaying the optimal trajectory...")
+                    
+                    replay_trajectory_video(optim_candidates_images[optim_traj_idx], title='Optimal Trajectory', frame_rate=10)
+                score = input("Please rate the trajectory (0-5, 5 is the best): ")
+                optim_traj_scores.append(int(score))
+            
+            else:
+                optim_traj_idx = get_optimal_traj(learned_reward, traj_embeds)
+
+                if args.real_robot:
+                    print("\nReplaying the optimal trajectory on the robot...")
+                    replay_traj_widowx(widowx_env, traj_policy_outs[optim_traj_idx])
+                else:
+                    print("\nReplaying the optimal trajectory...")
+                    replay_trajectory_video(traj_img_obs[optim_traj_idx], title='Optimal Trajectory', frame_rate=10)
+                
+                score = input("Please rate the trajectory (0-5, 5 is the best): ")
+                optim_traj_scores.append(int(score))
 
 
 def lang_pref_learning(
@@ -264,6 +293,9 @@ def lang_pref_learning(
         widowx_env.start()
         widowx_env.move_to_neutral()
 
+    optim_candidates_embeds = traj_embeds[optimal_candidates]
+    optim_candidates_images = [traj_img_obs[i] for i in optimal_candidates]
+    optim_candidates_policy_outs = [traj_policy_outs[i] for i in optimal_candidates]
 
     for it, train_lang_data in enumerate(dataloader):
         if it >= 20:
@@ -282,7 +314,7 @@ def lang_pref_learning(
         else:
             curr_traj_images = traj_img_obs[idx]
             print("Replaying the current trajectory...\n")
-            replay_trajectory_video(curr_traj_images, title='Current Trajectory', frame_rate=10)
+            replay_trajectory_video(curr_traj_images, title='Current Trajectory', frame_rate=20)
 
         nlcomp = input("Please provide the language feedback: ")
         nlcomp = remove_special_characters(nlcomp)
@@ -359,12 +391,33 @@ def lang_pref_learning(
                 lr_scheduler.step()
                 
         if (it + 1) % 5 == 0:
-            # Show users the best trajectory so far and let them rate it
-            optim_traj_idx = get_optimal_traj(learned_reward, traj_embeds)
-            traj_images = traj_img_obs[optim_traj_idx]
-            replay_trajectory_video(traj_images, title='Optimal Trajectory', frame_rate=10)
-            score = input("Please rate the trajectory (0-5, 5 is the best): ")
-            optim_traj_scores.append(int(score))
+            if it >= 15:
+                # Show users the best trajectory so far and let them rate it
+                optim_traj_idx = get_optimal_traj(learned_reward, optim_candidates_embeds)
+
+                # print(f"Optimal Trajectory Index: {optim_traj_idx}")
+                if args.real_robot:
+                    print("\nReplaying the optimal trajectory on the robot...")
+                    replay_traj_widowx(widowx_env, optim_candidates_policy_outs[optim_traj_idx])
+                else:
+                    print("\nReplaying the optimal trajectory...")
+                    
+                    replay_trajectory_video(optim_candidates_images[optim_traj_idx], title='Optimal Trajectory', frame_rate=10)
+                score = input("Please rate the trajectory (0-5, 5 is the best): ")
+                optim_traj_scores.append(int(score))
+            
+            else:
+                optim_traj_idx = get_optimal_traj(learned_reward, traj_embeds)
+
+                if args.real_robot:
+                    print("\nReplaying the optimal trajectory on the robot...")
+                    replay_traj_widowx(widowx_env, traj_policy_outs[optim_traj_idx])
+                else:
+                    print("\nReplaying the optimal trajectory...")
+                    replay_trajectory_video(traj_img_obs[optim_traj_idx], title='Optimal Trajectory', frame_rate=10)
+                
+                score = input("Please rate the trajectory (0-5, 5 is the best): ")
+                optim_traj_scores.append(int(score))
     
     return optim_traj_scores
 

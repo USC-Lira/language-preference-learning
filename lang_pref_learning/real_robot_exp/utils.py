@@ -1,5 +1,6 @@
 import re
 import cv2
+import time
 import torch
 import numpy as np
 from einops import rearrange
@@ -43,6 +44,25 @@ def get_traj_embeds_wx(trajs, model, device, use_img_obs=False, img_obs=None):
 
     return traj_embeds
 
+
+def replay_traj_widowx(env, policy_dict):
+    actions = np.stack([d['actions'] for d in policy_dict], axis=0)
+
+    last_tstep = time.time()
+
+    env._controller.open_gripper(True)
+    env.move_to_neutral()
+
+    for action in actions:
+        env.step(action)
+        # t = time.time()
+        # while True:
+        #     if t - last_tstep > env_params['move_duration']:
+        #         print(f'loop {t - last_tstep}s')
+        #         obs = env.step(action)
+        #         obs_imgs.append(obs['images'])
+        #         last_tstep = t
+        #         break
 
 
 def replay_trajectory_video(traj_images, title='Current Trajectory', frame_rate=10, close=True):

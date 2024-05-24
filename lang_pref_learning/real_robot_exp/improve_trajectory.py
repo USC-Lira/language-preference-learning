@@ -111,7 +111,7 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
 
         lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
         # next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
-        next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
+        next_traj_idx = get_nearest_embed_distance(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         curr_traj_idx = next_traj_idx
         # next_traj_value = reward_values[next_traj_idx]
 
@@ -125,9 +125,10 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
             print(f'========= Iteration {i} =========')
             print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
             print(f'Language comparison: {nlcomp}\n')
-
-    widowx_env._controller.open_gripper(True)
-    widowx_env.move_to_neutral()
+            
+    if args.real_robot:
+        widowx_env._controller.open_gripper(True)
+        widowx_env.move_to_neutral()
 
     return optimal_reached, traj_values
 
