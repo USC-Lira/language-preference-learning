@@ -21,6 +21,10 @@ ori_lang_comparisons = {
         "greater": ["Detour to reach the spoon", "Avoid the pan better"],
         "less": ["Directly reach the spoon", "Be more straightforward to the spoon"],
     },
+    "distance_to_spoon": {
+        "greater": ["Be further away from the spoon", "Have a larger distance to the spoon"],
+        "less": ["Be closer to the spoon", "Move closer to the spoon"],
+    },
 }
 
 
@@ -320,6 +324,43 @@ def generate_comparisons_in_range(
                     traj_b_indexes.append(i)
 
                 all_lang_comps.append(lang_comp)
+
+    # Compare every two trajectories based on distance to the spoon
+    spoon_pos = np.array([0.44198237, 0.0728401 , 0.28102552])
+    for i in range(len(traj_idx)):
+        for j in range(i + 1, len(traj_idx)):
+            real_traj_idx_i, real_traj_idx_j = traj_idx[i], traj_idx[j]
+            spoon_dist_i = np.linalg.norm(states[real_traj_idx_i][:, :3] - spoon_pos, axis=1)
+            spoon_dist_j = np.linalg.norm(states[real_traj_idx_j][:, :3] - spoon_pos, axis=1)
+
+            avg_spoon_dist_i, avg_spoon_dist_j = np.mean(spoon_dist_i), np.mean(spoon_dist_j)
+
+            greater_lang_comps = generate_lang_comparisons(
+                "distance_to_spoon", "greater", augmented_comps, split
+            )
+            for lang_comp in greater_lang_comps:
+                if avg_spoon_dist_i < avg_spoon_dist_j:
+                    traj_a_indexes.append(i)
+                    traj_b_indexes.append(j)
+                else:
+                    traj_a_indexes.append(j)
+                    traj_b_indexes.append(i)
+
+                all_lang_comps.append(lang_comp)
+            
+            less_lang_comps = generate_lang_comparisons(
+                "distance_to_spoon", "less", augmented_comps, split
+            )
+            for lang_comp in less_lang_comps:
+                if avg_spoon_dist_i > avg_spoon_dist_j:
+                    traj_a_indexes.append(i)
+                    traj_b_indexes.append(j)
+                else:
+                    traj_a_indexes.append(j)
+                    traj_b_indexes.append(i)
+
+                all_lang_comps.append(lang_comp)
+
 
     
     # Compare every two trajectories based on speed

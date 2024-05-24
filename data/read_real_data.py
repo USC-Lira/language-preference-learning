@@ -119,8 +119,8 @@ def read_all_traj(data_root_dir, save_root_dir):
 
 
 if __name__ == "__main__":
-    data_dir = "avoid_danger_user_study_raw"
-    save_dir = "avoid_danger_user_study"
+    data_dir = "dataset_avoid_danger"
+    save_dir = "data_avoid_danger_2"
 
     read_all_traj(data_dir, save_dir)
     
