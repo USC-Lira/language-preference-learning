@@ -16,7 +16,7 @@ from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTP
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.real_robot_exp.utils import get_lang_embed, get_traj_embeds_wx
-from lang_pref_learning.real_robot_exp.utils import replay_trajectory_video, remove_special_characters
+from lang_pref_learning.real_robot_exp.utils import replay_traj_widowx, replay_trajectory_video, remove_special_characters
 
 from data.utils import speed_wx, distance_to_pan_wx, distance_to_spoon_wx
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
@@ -45,24 +45,7 @@ except ImportError as e:
     print(e)
 
 
-def replay_widowx(env, policy_dict):
-    actions = np.stack([d['actions'] for d in policy_dict], axis=0)
 
-    last_tstep = time.time()
-
-    env._controller.open_gripper(True)
-    env.move_to_neutral()
-
-    for action in actions:
-        env.step(action)
-        # t = time.time()
-        # while True:
-        #     if t - last_tstep > env_params['move_duration']:
-        #         print(f'loop {t - last_tstep}s')
-        #         obs = env.step(action)
-        #         obs_imgs.append(obs['images'])
-        #         last_tstep = t
-        #         break
 
 
 def get_feature_value(traj, traj_mean=False):
@@ -107,7 +90,7 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
         # Show current trajecotry to the user
         if args.real_robot:
             curr_traj_policy_out = traj_policy_outs[curr_traj_idx]
-            replay_widowx(widowx_env, curr_traj_policy_out)
+            replay_traj_widowx(widowx_env, curr_traj_policy_out)
         else:
             curr_traj_images = traj_images[curr_traj_idx]
             replay_trajectory_video(curr_traj_images)

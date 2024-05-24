@@ -4,6 +4,7 @@ Preference learning for real robot experiments
 
 # Importing the libraries
 import json
+import pickle
 import re
 import os
 import torch
@@ -22,9 +23,33 @@ from lang_pref_learning.pref_learning.utils import feature_aspects
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
 from lang_pref_learning.real_robot_exp.utils import get_traj_embeds_wx, get_lang_embed
 from lang_pref_learning.real_robot_exp.improve_trajectory import get_feature_value
-from lang_pref_learning.real_robot_exp.utils import replay_trajectory_video, remove_special_characters
+from lang_pref_learning.real_robot_exp.utils import replay_traj_widowx, replay_trajectory_video, remove_special_characters
 
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+
+
+try:
+    import time
+    import rospy
+    import pickle as pkl
+
+    from multicam_server.topic_utils import IMTopic
+    from widowx_envs.widowx_env import WidowXEnv
+
+    env_params = {
+    'camera_topics': [IMTopic('/blue/image_raw')
+                      ],
+    'gripper_attached': 'custom',
+    'skip_move_to_neutral': True,
+    'move_to_rand_start_freq': -1,
+    'fix_zangle': 0.1,
+    'move_duration': 0.2,
+    'adaptive_wait': True,
+    'action_clipping': None
+}
+    
+except ImportError as e:
+    print(e)
 
 
 # learned and true reward func (linear for now)
@@ -60,6 +85,7 @@ def load_data(args, DEBUG=False):
     traj_root_dir = os.path.join(args.data_dir, 'trajectory')
     trajs = []
     traj_images = []
+    traj_policy_outs = []
 
     # Read all trajectory directories by numerical order
     traj_dirs = os.listdir(traj_root_dir)
@@ -77,6 +103,9 @@ def load_data(args, DEBUG=False):
         traj_img_obs = np.load(os.path.join(traj_root_dir, traj_dir, 'traj_img_obs.npy'))
         trajs.append(traj)
         traj_images.append(traj_img_obs)
+        with open(os.path.join(traj_root_dir, traj_dir, 'policy_out.pkl'), 'rb') as f:
+            policy_out = pickle.load(f)
+            traj_policy_outs.append(policy_out)
 
     # need to run categorize.py first to get these files
     # greater_nlcomps = json.load(open(f"{args.data_dir}/greater_nlcomps.json", "rb"))
@@ -94,6 +123,7 @@ def load_data(args, DEBUG=False):
         # "less_nlcomps": less_nlcomps,
         # "classified_nlcomps": classified_nlcomps,
         'traj_img_obs': traj_images,
+        'traj_policy_outs': traj_policy_outs,
     }
 
     return data
@@ -113,6 +143,7 @@ def comp_pref_learning(
     learned_reward,
     traj_embeds,
     traj_img_obs,
+    traj_policy_outs,
     optimizer,
     DEBUG=False,
 ):
@@ -124,6 +155,11 @@ def comp_pref_learning(
     optim_traj_scores = []
 
     CEloss = nn.CrossEntropyLoss()
+
+    if args.real_robot:
+        widowx_env = WidowXEnv(env_params)
+        widowx_env.start()
+        widowx_env.move_to_neutral()
 
     for it, comp_data in enumerate(dataloader):
         if it >= 20:
@@ -137,13 +173,24 @@ def comp_pref_learning(
 
         print(f"\n...Query {it + 1}...")
         # Replay two trajectories to the user
-        replay_trajectory_video(traj_a_images, 
-                                title='Trajectory A',
-                                frame_rate=10)
-        
-        replay_trajectory_video(traj_b_images, 
-                                title='Trajectory B',
-                                frame_rate=10)
+        if args.real_robot:
+            print("Replaying trajectory A on the robot...\n")
+            traj_policy_out_a = traj_policy_outs[idx_a]
+            replay_traj_widowx(widowx_env, traj_policy_out_a)
+
+            print("Replaying trajectory B on the robot...\n")
+            traj_policy_out_b = traj_policy_outs[idx_b]
+            replay_traj_widowx(widowx_env, traj_policy_out_b)
+            
+        else:
+            print("Replaying trajectory A...\n")
+            replay_trajectory_video(traj_a_images, 
+                                    title='Trajectory A',
+                                    frame_rate=10)
+            print("Replaying trajectory B...\n")
+            replay_trajectory_video(traj_b_images, 
+                                    title='Trajectory B',
+                                    frame_rate=10)
         
         comp_feedback = input("Please choose your preferred one (a or b): ")
 
@@ -193,6 +240,7 @@ def lang_pref_learning(
     learned_reward,
     traj_embeds,
     traj_img_obs,
+    traj_policy_outs,
     lang_embeds,
     optimizer,
     device,
@@ -204,14 +252,17 @@ def lang_pref_learning(
     # Transform numpy array to torch tensor (improve this with a function)
     traj_embeds = torch.from_numpy(traj_embeds)
 
-    eval_cross_entropies = []
-    learned_reward_norms = []
     all_lang_feedback = []
     all_other_language_feedback_feats = []
     all_lang_embeds = []
     sampled_traj_embeds = []
     optim_traj_scores = []
     logsigmoid = nn.LogSigmoid()
+
+    if args.real_robot:
+        widowx_env = WidowXEnv(env_params)
+        widowx_env.start()
+        widowx_env.move_to_neutral()
 
 
     for it, train_lang_data in enumerate(dataloader):
@@ -224,8 +275,15 @@ def lang_pref_learning(
         print(f"\n...Query {it + 1}...")
 
         # get the language feedback from the user
-        curr_traj_images = traj_img_obs[idx]
-        replay_trajectory_video(curr_traj_images, title='Current Trajectory', frame_rate=10)
+        if args.real_robot:
+            current_traj_policy_out = traj_policy_outs[idx]
+            print("Replaying the current trajectory on the robot...\n")
+            replay_traj_widowx(widowx_env, current_traj_policy_out)
+        else:
+            curr_traj_images = traj_img_obs[idx]
+            print("Replaying the current trajectory...\n")
+            replay_trajectory_video(curr_traj_images, title='Current Trajectory', frame_rate=10)
+
         nlcomp = input("Please provide the language feedback: ")
         nlcomp = remove_special_characters(nlcomp)
         lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
@@ -311,53 +369,6 @@ def lang_pref_learning(
     return optim_traj_scores
 
 
-def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, test=False, device="cuda"):
-    """
-    Evaluate the cross-entropy between the learned and true distributions
-
-    Input:
-        - test_dataloader: DataLoader for the test data
-        - true_traj_rewards: true rewards of the test trajectories
-        - learned_reward: the learned reward function
-        - traj_embeds: the embeddings of the test trajectories
-        - feature_scale_factor: the scale factor for the learned reward
-        - test: whether to use the true reward for evaluation
-
-    Output:
-        - total_cross_entropy: the average cross-entropy between the learned and true distributions
-    """
-    total_cross_entropy = AverageMeter("cross-entropy")
-    bce_loss = nn.BCELoss()
-    for i, test_data in enumerate(test_dataloader):
-        traj_a, traj_b, idx_a, idx_b = test_data
-
-        # get the embeddings of the two trajectories
-        traj_a_embed = traj_embeds[idx_a]
-        traj_b_embed = traj_embeds[idx_b]
-
-        # get bernoulli distributions for the two trajectories
-        true_rewards = torch.tensor([true_traj_rewards[idx_a], true_traj_rewards[idx_b]])
-        # make true probs 0 and 1
-        # true_probs = torch.tensor([torch.argmax(true_rewards) == 0, torch.argmax(true_rewards) == 1]).float()
-        # make true probs with softmax
-        true_probs = torch.softmax(true_rewards, dim=0).float()
-
-        if test:
-            learned_probs = true_probs
-
-        else:
-            traj_a_embed = torch.tensor(traj_a_embed)
-            traj_b_embed = torch.tensor(traj_b_embed)
-            learned_rewards = torch.tensor([learned_reward(traj_a_embed), learned_reward(traj_b_embed)])
-            learned_probs = torch.softmax(learned_rewards, dim=0)
-
-        # calculate cross-entropy between learned and true distributions
-        cross_entropy = bce_loss(learned_probs, true_probs)
-        # kl_div_loss = kl_div(learned_probs.log(), true_probs)
-        total_cross_entropy.update(cross_entropy, 1)
-    return total_cross_entropy.avg
-
-
 def save_results(args, results, postfix="noisy"):
     save_dir = f"{args.true_reward_dir}/pref_learning"
     if not os.path.exists(save_dir):
@@ -383,6 +394,7 @@ def run(args):
     data_dict = load_data(args)
     trajs = data_dict["trajs"]
     traj_img_obs = data_dict["traj_img_obs"]
+    traj_policy_outs = data_dict["traj_policy_outs"]
     # nlcomps, nlcomps_embed = (
     #     data_dict["nlcomps"],
     #     data_dict["nlcomp_embeds"],
@@ -496,6 +508,7 @@ def run(args):
             learned_reward,
             traj_embeds,
             traj_img_obs,
+            traj_policy_outs,
             optimizer,
         )
 
@@ -511,6 +524,7 @@ def run(args):
             learned_reward,
             traj_embeds,
             traj_img_obs,
+            traj_policy_outs,
             None,
             optimizer,
             device,
@@ -603,6 +617,11 @@ if __name__ == "__main__":
         default="lang",
         type=str,
         choices=["lang", "comp"],
+    )
+    parser.add_argument(
+        "--real-robot",
+        action="store_true",
+        help="whether to run on real robot",
     )
 
     args = parser.parse_args()
