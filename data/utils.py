@@ -254,11 +254,11 @@ def generate_noisy_augmented_synthetic_comparisons_commands(traj1, traj2, n_dupl
 
     return total_commands
 
-
-STATE_OBS_DIM = 65
+# 31 = (39 - 11(obj quat + padding) - 18(prev obs)) + 1(tcp vel) + 20(qpos, qvel from env state)
+STATE_OBS_DIM = 31
 ACTION_DIM = 4  # OSC_POSITION controller
-OBJECT_STATE_DIM = 25
-PROPRIO_STATE_DIM = 40
+OBJECT_STATE_DIM = 0
+PROPRIO_STATE_DIM = 31
 
 
 def gt_reward(gym_obs):

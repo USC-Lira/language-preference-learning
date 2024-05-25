@@ -103,6 +103,7 @@ class NLTrajAutoencoder(nn.Module):
         else:
             encoded_traj_a = self.traj_encoder(traj_a)
             encoded_traj_b = self.traj_encoder(traj_b)
+            # import ipdb; ipdb.set_trace()
 
         if self.traj_encoder_cls == "lstm":
             encoded_traj_a = encoded_traj_a
