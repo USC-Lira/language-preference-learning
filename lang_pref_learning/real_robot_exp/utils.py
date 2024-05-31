@@ -50,9 +50,6 @@ def replay_traj_widowx(env, policy_dict):
 
     last_tstep = time.time()
 
-    env._controller.open_gripper(True)
-    env.move_to_neutral()
-
     for action in actions:
         env.step(action)
         # t = time.time()
@@ -63,6 +60,10 @@ def replay_traj_widowx(env, policy_dict):
         #         obs_imgs.append(obs['images'])
         #         last_tstep = t
         #         break
+    
+    time.sleep(0.2)
+    env._controller.open_gripper(True)
+    env.move_to_neutral()
 
 
 def replay_trajectory_video(traj_images, title='Current Trajectory', frame_rate=10, close=True):
