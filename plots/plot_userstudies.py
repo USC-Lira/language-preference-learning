@@ -50,7 +50,7 @@ def satisfaction():
     ax.set_title("Improve Trajectory:\nSatisfaction with Final Trajectory", fontsize=18)
     ax.set_xticks(lvls)
     ax.set_ylim([0, 5.5])
-    ax.set_xlabel("Satisfaction Level")
+    ax.set_xlabel("Satisfaction Level\n[1 Completely unsatisfied ~ 5 Completely satisfied]")
     ax.set_xticklabels(lvls)
     ax.set_ylabel("Count")
     plt.tight_layout(pad=2.0)
@@ -319,53 +319,54 @@ def trust():
     plt.savefig("trust.png")
 
 def aspect():
-    lang_aspects = ["Time efficiency", "Convenience", 
+    lang_aspects = [
+                "Time efficiency", "Convenience", 
 "Adaptability", "Time efficiency", "Convenience", 
 "Adaptability", "Time efficiency", "Convenience", 
 "Adaptability", 
 "Adaptability", "Time efficiency", "Convenience", 
-"Time efficiency", 
+                "Time efficiency", 
 "Adaptability", "Time efficiency", "Convenience", 
 "Adaptability", "Time efficiency", "Convenience", 
 "Adaptability", "Time efficiency", 
 "Adaptability", "Time efficiency"]
     
     lang_aspects_with_neg = [
-"Not Adaptability", "Time efficiency", "Convenience", 
-"Adaptability", "Time efficiency", "Convenience", 
-"Adaptability", "Time efficiency", "Convenience", 
-"Adaptability", "Not Time efficiency", "Not Convenience", 
-"Adaptability", "Time efficiency", "Convenience", 
-"Not Adaptability", "Time efficiency", "Not Convenience", 
-"Adaptability", "Time efficiency", "Convenience", 
-"Adaptability", "Time efficiency", "Convenience", 
-"Adaptability", "Time efficiency", "Not Convenience", 
-"Adaptability", "Time efficiency", "Not Convenience"]
+"Not Adaptability", "Time efficiency",      "Convenience", 
+"Adaptability",     "Time efficiency",      "Convenience", 
+"Adaptability",     "Time efficiency",      "Convenience", 
+"Adaptability",     "Not Time efficiency",  "Not Convenience", 
+"Adaptability",     "Time efficiency",      "Convenience", 
+"Not Adaptability", "Time efficiency",      "Not Convenience", 
+"Adaptability",     "Time efficiency",      "Convenience", 
+"Adaptability",     "Time efficiency",      "Convenience", 
+"Adaptability",     "Time efficiency",      "Not Convenience", 
+"Adaptability",     "Time efficiency",      "Not Convenience"]
     
     pairwise_aspects = [
-"Convenience",
-"Adaptability", "Convenience",
+                                    "Convenience",
+"Adaptability",                     "Convenience",
 "None of them",
-"Adaptability", "Convenience",
-"Convenience",
-"Adaptability", "Convenience",
-"Time efficiency", "Convenience",
+"Adaptability",                     "Convenience",
+                                    "Convenience",
+"Adaptability",                     "Convenience",
+                "Time efficiency",  "Convenience",
 "None of them",
-"Convenience",
-"Convenience",
+                                    "Convenience",
+                                    "Convenience",
     ]
 
     pairwise_aspects_with_neg = [
-"Not Adaptability", "Not Time efficiency", "Convenience",
-"Adaptability", "Not Time efficiency", "Convenience",
-"Not Adaptability", "Not Time efficiency", "Not Convenience",
-"Adaptability", "Not Time efficiency", "Convenience",
-"Not Adaptability", "Not Time efficiency", "Convenience",
-"Adaptability", "Not Time efficiency", "Convenience",
-"Not Adaptability", "Time efficiency", "Convenience",
-"Not Adaptability", "Not Time efficiency", "Not Convenience",
-"Not Adaptability", "Not Time efficiency","Convenience",
-"Not Adaptability", "Not Time efficiency", "Convenience",
+"Not Adaptability", "Not Time efficiency",  "Convenience",
+"Adaptability",     "Not Time efficiency",  "Convenience",
+"Not Adaptability", "Not Time efficiency",  "Not Convenience",
+"Adaptability",     "Not Time efficiency",  "Convenience",
+"Not Adaptability", "Not Time efficiency",  "Convenience",
+"Adaptability",     "Not Time efficiency",  "Convenience",
+"Not Adaptability", "Time efficiency",      "Convenience",
+"Not Adaptability", "Not Time efficiency",  "Not Convenience",
+"Not Adaptability", "Not Time efficiency",  "Convenience",
+"Not Adaptability", "Not Time efficiency",  "Convenience",
     ]
 
     # Sample 5 colors from the colormap
@@ -462,7 +463,7 @@ def aspect():
     plt.tight_layout(pad=2.0)
 
     # legend
-    ax.legend(["Language", "Pairwise"], loc="upper right")
+    ax.legend(["Language", "Pairwise"], loc="lower right")
     # mod colors
     ax.get_legend().legend_handles[0].set_color(colors[1])
     ax.get_legend().legend_handles[1].set_color(colors[2])
