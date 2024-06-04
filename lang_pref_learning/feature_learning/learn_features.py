@@ -19,7 +19,9 @@ from lang_pref_learning.feature_learning.utils import (
     create_logger,
     AverageMeter,
 )
+
 from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
+from data.utils import MW_STATE_OBS_DIM, MW_ACTION_DIM, MW_PROPRIO_STATE_DIM, MW_OBJECT_STATE_DIM
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -295,8 +297,10 @@ def train(logger, args):
         PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
         OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
     elif args.env == "metaworld":
-        # TODO: fill in the dimensions for metaworld
-        pass
+        STATE_OBS_DIM = MW_STATE_OBS_DIM
+        ACTION_DIM = MW_ACTION_DIM
+        PROPRIO_STATE_DIM = MW_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = MW_OBJECT_STATE_DIM
     else:
         raise ValueError("Invalid environment")
 
@@ -577,6 +581,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=5, help="")
     parser.add_argument("--batch-size", type=int, default=1024, help="")
     parser.add_argument("--lr", type=float, default=1e-3, help="")
+    parser.add_argument("--finetune-lr", type=float, default=1e-4, help="")
     parser.add_argument("--weight-decay", type=float, default=0, help="")
     parser.add_argument("--use_lr_scheduler", action="store_true", help="use lr scheduler")
     parser.add_argument("--encoder-hidden-dim", type=int, default=128, help="")
@@ -685,11 +690,11 @@ if __name__ == "__main__":
     else:
         # BERT as the language encoder: two-stage training
         # Stage 1: train the trajectory encoder with BERT frozen
-        logger.info("\n------------------ Freeze BERT ------------------")
+        logger.info("\n------------------ Freeze Language Model ------------------")
         train(logger, args)
 
         # Stage 2: co-finetune BERT and the trajectory encoder
-        logger.info("\n------------------ Co-finetune BERT ------------------")
+        logger.info("\n------------------ Co-finetune Language Model ------------------")
         args.finetune_bert = True
-        args.lr = 1e-4
+        args.lr = args.finetune_lr
         train(logger, args)

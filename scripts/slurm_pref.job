@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=3
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --time=00:10:00
+
+source /scr/zyang966/miniconda3/etc/profile.d/conda.sh
+conda activate lang
+bash scripts/pref_learning.sh 0
+bash scripts/pref_learning.sh 1
+bash scripts/pref_learning.sh 2

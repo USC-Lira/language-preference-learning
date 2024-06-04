@@ -57,7 +57,7 @@ def load_results(base_data_dir, method, postfix):
 def plot(base_data_dir):
     noisy_results_baseline, noiseless_results_baseline = load_results(base_data_dir, 'comp', 'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
     noisy_results_other_feedback, noiseless_results_other_feedback = load_results(base_data_dir, 'lang',
-                                                                                  'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
+                                                                                  'lr_0.005_other_feedback_20_temp_1.0_lc_1.0')
     # noisy_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos = load_results(base_data_dir,
     #                                                                                                       'other_feedback_10_temp_cos_lc_1.0')
     # noisy_results_other_feedback_10_temp_cos_lc, noiseless_results_other_feedback_10_temp_cos_lc = load_results(
@@ -97,22 +97,22 @@ def plot(base_data_dir):
 
     colors = ['#E48B10', '#298c8c']
     for noisy_results, noiseless_results, label, color in zip(all_noisy_results, all_noiseless_results, labels, colors):
-        plot_curve_and_std(ax[0], np.mean(noiseless_results['all_eval_cross_entropies'], axis=0),
-                           np.std(noiseless_results['all_eval_cross_entropies'], axis=0), label,
-                           color=color)
-        plot_curve_and_std(ax[1], np.mean(noisy_results['all_eval_cross_entropies'], axis=0),
+        # plot_curve_and_std(ax[1], np.mean(noiseless_results['all_eval_cross_entropies'], axis=0),
+        #                    np.std(noiseless_results['all_eval_cross_entropies'], axis=0), label,
+        #                    color=color)
+        plot_curve_and_std(ax[0], np.mean(noisy_results['all_eval_cross_entropies'], axis=0),
                            np.std(noisy_results['all_eval_cross_entropies'], axis=0), label,
                            color=color)
 
-    ax[0].set_xlabel('Number of Queries')
-    ax[0].set_ylabel('Cross-Entropy')
-    # ax[0].legend(fontsize=25, frameon=False)
-    ax[0].set_title('Noiseless Feedback')
-
     ax[1].set_xlabel('Number of Queries')
     ax[1].set_ylabel('Cross-Entropy')
-    ax[1].legend(fontsize=25, frameon=False)
-    ax[1].set_title('Noisy Feedback')
+    # ax[0].legend(fontsize=25, frameon=False)
+    ax[1].set_title('Meta-World')
+
+    ax[0].set_xlabel('Number of Queries')
+    ax[0].set_ylabel('Cross-Entropy')
+    ax[0].legend(fontsize=25, frameon=False)
+    ax[0].set_title('Robosuite')
 
     # set y-axis limit
     ax[0].set_ylim([0.51, 0.72])

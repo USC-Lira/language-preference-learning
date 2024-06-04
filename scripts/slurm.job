@@ -7,4 +7,4 @@
 
 source /scr/zyang966/miniconda3/etc/profile.d/conda.sh
 conda activate lang
-bash scripts/img_obs_stack_extracted.sh
+bash scripts/avoid_danger.sh
