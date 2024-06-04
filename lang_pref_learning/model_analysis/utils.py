@@ -8,7 +8,8 @@ from data.utils import RS_OBJECT_STATE_DIM, RS_PROPRIO_STATE_DIM, WidowX_PROPRIO
 
 def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, 
                          tokenizer=None, nlcomps_bert_embeds=None,
-                         use_img_obs=False, img_obs=None, actions=None):
+                         use_img_obs=False, img_obs=None, actions=None,
+                         traj_encoder_type="mlp"):
     """
     Get the trajectory and language embeddings for the given trajs and nlcomps
 
@@ -45,7 +46,10 @@ def get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder,
     batch_size = 8
     for i in range(0, len(trajs), batch_size):
         batch_trajs_inputs = {k: v[i:i + batch_size].to(device) for k, v in trajs_inputs.items()}
-        batch_encoded_trajs = model.traj_encoder(batch_trajs_inputs)
+        if traj_encoder_type == "cnn":
+            batch_encoded_trajs = model.traj_encoder(batch_trajs_inputs)
+        else:
+            batch_encoded_trajs = model.traj_encoder(batch_trajs_inputs['trajs'])
         batch_trajs_embeds = torch.mean(batch_encoded_trajs, dim=-2, keepdim=False).detach().cpu().numpy()
         trajs_embeds.append(batch_trajs_embeds)
 

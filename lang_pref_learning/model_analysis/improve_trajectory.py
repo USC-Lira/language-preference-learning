@@ -14,6 +14,7 @@ from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_la
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+from data.utils import MW_STATE_OBS_DIM, MW_ACTION_DIM, MW_PROPRIO_STATE_DIM, MW_OBJECT_STATE_DIM
 
 
 def initialize_reward(num_features):
@@ -56,7 +57,7 @@ def get_best_lang(optimal_traj_embed, curr_traj_embed, lang_embeds, softmax=Fals
     return lang_embeds[idx], idx
 
 
-def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, reward_function, less_feature_idx,
+def get_lang_feedback(env, optimal_traj_feature_value, curr_traj_feature_value, reward_function, less_feature_idx,
                       greater_nlcomps, less_nlcomps, all_nlcomps, softmax=False):
     # Based on the reward function, determine which feature aspect to improve
     feature_diff = optimal_traj_feature_value - curr_traj_feature_value
@@ -67,7 +68,10 @@ def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, rewar
     else:
         feature_aspect = np.argmax(np.abs(reward_diff))
 
-    feature_names = ["gt_reward", "speed", "height", "distance_to_cube", "distance_to_bottle"]
+    if env == "robosuite":
+        feature_names = ["gt_reward", "speed", "height", "distance_to_cube", "distance_to_bottle"]
+    elif env == "metaworld":
+        feature_names = ['height', 'velocity', 'distance']
     if feature_aspect in less_feature_idx:
         # If the feature aspect is less than the optimal trajectory, then the language comparison should be greater
         nlcomp = np.random.choice(less_nlcomps[feature_names[feature_aspect]])
@@ -75,6 +79,7 @@ def get_lang_feedback(optimal_traj_feature_value, curr_traj_feature_value, rewar
         # If the feature aspect is greater than the optimal trajectory, then the language comparison should be less
         nlcomp = np.random.choice(greater_nlcomps[feature_names[feature_aspect]])
     return nlcomp, all_nlcomps.index(nlcomp)
+    
 
 
 def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, traj_embeds, lang_embeds,
@@ -102,7 +107,7 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
         # Find the nearest language embedding to the optimal trajectory embedding
         # lang_embed, lang_idx = get_best_lang(traj_embeds[optimal_traj_idx], traj_embeds[curr_traj_idx], lang_embeds)
         # nlcomp = nlcomps[lang_idx]
-        nlcomp, idx = get_lang_feedback(feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func,
+        nlcomp, idx = get_lang_feedback(args.env, feature_values[optimal_traj_idx], feature_values[curr_traj_idx], reward_func,
                                         less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, softmax=use_softmax)
         lang_embed = lang_embeds[idx]
         # lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
@@ -144,6 +149,9 @@ def main(args):
     if args.use_image_obs:
         traj_img_obs = np.load(os.path.join(args.data_dir, 'test/traj_img_obs.npy'))
         actions = np.load(os.path.join(args.data_dir, 'test/actions.npy'))
+    else:
+        traj_img_obs = None
+        actions = None
     
     # Use all language comparisons we have in the train, val, and test sets
     nlcomps = json.load(open(os.path.join(args.data_dir, 'all_unique_nlcomps.json'), 'rb'))
@@ -169,14 +177,19 @@ def main(args):
         ACTION_DIM = RS_ACTION_DIM
         PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
         OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
+
     elif args.env == "widowx":
         STATE_OBS_DIM = WidowX_STATE_OBS_DIM
         ACTION_DIM = WidowX_ACTION_DIM
         PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
         OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
+
     elif args.env == "metaworld":
-        # TODO: fill in the dimensions for metaworld
-        pass
+        STATE_OBS_DIM = MW_STATE_OBS_DIM
+        ACTION_DIM = MW_ACTION_DIM
+        PROPRIO_STATE_DIM = MW_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = MW_OBJECT_STATE_DIM
+
     else:
         raise ValueError("Invalid environment")
 
@@ -238,27 +251,38 @@ def main(args):
     #         less_nlcomps_bert_embeds[feature_name].append(embedding.detach().cpu().numpy())
 
     # Randomly initialize a reward function
-    reward_func = initialize_reward(5)
+    if args.env == "robosuite":
+        feature_dim = 5
+    elif args.env == "metaworld":
+        feature_dim = 3
+    else:
+        raise ValueError("Invalid environment")
+    reward_func = initialize_reward(feature_dim)
 
     # Find the optimal trajectory given the reward function
-    feature_values = np.array([get_feature_value(traj) for traj in trajs])
+    # feature_values = np.array([get_feature_value(traj) for traj in trajs])
+    feature_values = np.load(os.path.join(args.data_dir, 'test/feature_vals.npy'))
+    if args.env == "metaworld":
+        feature_values = np.mean(feature_values, axis=-1, keepdims=False)
+        feature_values = feature_values[:, :3]
     # Normalize feature values
     feature_values = (feature_values - np.min(feature_values, axis=0)) / (
             np.max(feature_values, axis=0) - np.min(feature_values, axis=0))
 
     # Randomly select some features and set their values to 1 - original value
-    less_idx = np.random.choice(5, size=2, replace=False)
+    # less_idx = np.random.choice(3, size=2, replace=False)
+    less_idx = [2]
     for i in less_idx:
         feature_values[:, i] = 1 - feature_values[:, i]
 
-    optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values,
-                                                                                        less_idx,
-                                                                                        greater_nlcomps, less_nlcomps,
-                                                                                        nlcomps, traj_embeds,
-                                                                                        lang_embeds, model, device,
-                                                                                        tokenizer,
-                                                                                        lang_encoder, args,
-                                                                                        use_softmax=False)
+    # optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values,
+    #                                                                                     less_idx,
+    #                                                                                     greater_nlcomps, less_nlcomps,
+    #                                                                                     nlcomps, traj_embeds,
+    #                                                                                     lang_embeds, model, device,
+    #                                                                                     tokenizer,
+    #                                                                                     lang_encoder, args,
+    #                                                                                     use_softmax=False)
     
     optimal_reached, optimal_traj_value_softmax, traj_values_softmax = improve_trajectory(reward_func, feature_values,
                                                                                           less_idx,
@@ -269,11 +293,13 @@ def main(args):
                                                                                           lang_encoder, args,
                                                                                           use_softmax=True)
 
-    return optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax
+    return optimal_traj_value_softmax, traj_values_softmax
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
+
+    parser.add_argument("--env", type=str, default='robosuite', choices=['robosuite', 'widowx', 'metaworld'])
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
     parser.add_argument('--data-dir', type=str, default='data')
     parser.add_argument('--use-bert-encoder', action='store_true')
@@ -288,7 +314,7 @@ if __name__ == '__main__':
     parser.add_argument('--traj-encoder', type=str, default='cnn',
                         choices=['mlp', 'cnn'], help='which trajectory encoder to use')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num-trails', type=int, default=10)
+    parser.add_argument('--num-trials', type=int, default=100)
     args = parser.parse_args()
 
     # Set seed
@@ -297,20 +323,20 @@ if __name__ == '__main__':
     exp_name = args.model_dir.split('/')[-1]
     optimal_traj_values_softmax = []
     all_traj_values_softmax = []
-    optimal_traj_values_argmax = []
-    all_traj_values_argmax = []
-    for i in range(args.num_trails):
+    # optimal_traj_values_argmax = []
+    # all_traj_values_argmax = []
+    for i in range(args.num_trials):
         if i % 10 == 0:
             print(f'Attempt {i}')
-        optimal_traj_value_softmax, traj_values_softmax, optimal_traj_value_argmax, traj_values_argmax = main(args)
+        optimal_traj_value_softmax, traj_values_softmax = main(args)
         optimal_traj_values_softmax.append(optimal_traj_value_softmax)
         all_traj_values_softmax.append(traj_values_softmax)
-        optimal_traj_values_argmax.append(optimal_traj_value_argmax)
-        all_traj_values_argmax.append(traj_values_argmax)
+        # optimal_traj_values_argmax.append(optimal_traj_value_argmax)
+        # all_traj_values_argmax.append(traj_values_argmax)
 
-    all_traj_values_argmax = np.array(all_traj_values_argmax)
+    # all_traj_values_argmax = np.array(all_traj_values_argmax)
     all_traj_values_softmax = np.array(all_traj_values_softmax)
-    optimal_traj_values_argmax = np.array(optimal_traj_values_argmax)
+    # optimal_traj_values_argmax = np.array(optimal_traj_values_argmax)
     optimal_traj_values_softmax = np.array(optimal_traj_values_softmax)
 
     save_dir = os.path.join('model_analysis', exp_name)
@@ -319,9 +345,9 @@ if __name__ == '__main__':
 
     np.save(f'{save_dir}/all_traj_values_softmax.npy', all_traj_values_softmax)
     np.save(f'{save_dir}/optimal_traj_values_softmax.npy', optimal_traj_values_softmax)
-    np.save(f'{save_dir}/all_traj_values_argmax.npy', all_traj_values_argmax)
-    np.save(f'{save_dir}/optimal_traj_values_argmax.npy', optimal_traj_values_argmax)
+    # np.save(f'{save_dir}/all_traj_values_argmax.npy', all_traj_values_argmax)
+    # np.save(f'{save_dir}/optimal_traj_values_argmax.npy', optimal_traj_values_argmax)
 
 
     plot_results(optimal_traj_values_softmax, all_traj_values_softmax, 'softmax')
-    plot_results(optimal_traj_values_argmax, all_traj_values_argmax, 'argmax')
+    # plot_results(optimal_traj_values_argmax, all_traj_values_argmax, 'argmax')
