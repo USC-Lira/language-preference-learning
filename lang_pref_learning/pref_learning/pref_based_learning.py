@@ -341,7 +341,9 @@ def lang_pref_learning(
         for i in range(args.num_iterations):
             # Compute dot product of lang(traj_opt - traj_cur)
             # Minimize the negative dot product (loss)!
-            loss = -logsigmoid(learned_reward(nlcomp_features)).mean()
+            loss = 0.
+            if args.use_lang_pref:
+                loss = -logsigmoid(learned_reward(nlcomp_features)).mean()
 
             # Compute preference loss of selected language feedback over other language feedback
             # now nlcomp_features is of shape N x feature_dim, need to change it to N x n x feature_dim
@@ -616,8 +618,8 @@ def run(args):
         nlcomps_bert_embeds=train_nlcomps_embed,
         use_img_obs=args.use_img_obs,
         img_obs=train_img_obs,
-        actions=train_actions
-        
+        actions=train_actions,
+        traj_encoder_type=args.traj_encoder,
     )
     test_traj_embeds, test_lang_embeds = get_traj_lang_embeds(
         test_trajs,
@@ -629,7 +631,8 @@ def run(args):
         nlcomps_bert_embeds=test_nlcomps_embed,
         use_img_obs=args.use_img_obs,
         img_obs=test_img_obs,
-        actions=test_actions
+        actions=test_actions,
+        traj_encoder_type=args.traj_encoder,
     )
 
     #     # Save the embeddings
@@ -787,9 +790,13 @@ def run(args):
             postfix_noisy += "_temp_cos" + f"_lc_{args.lang_loss_coeff}"
             postfix_noiseless += "_temp_cos" + f"_lc_{args.lang_loss_coeff}"
 
-    else:
-        postfix_noisy += "_baseline"
-        postfix_noiseless += "_baseline"
+        if not args.use_lang_pref:
+            postfix_noisy += "_no_lang_pref"
+            postfix_noiseless += "_no_lang_pref"
+
+    if args.use_lang_pref:
+        postfix_noisy += "_lang_pref"
+        postfix_noiseless += "_lang_pref"
     
     # Save the results in .npz files
     save_results(args, noisy_results, postfix=postfix_noisy)
@@ -864,6 +871,12 @@ if __name__ == "__main__":
         "--use-softmax",
         action="store_true",
         help="whether to use softmax or argmax for feedback",
+    )
+
+    parser.add_argument(
+        "--use-lang-pref",
+        action="store_true",
+        help="whether to use language preference",
     )
     parser.add_argument(
         "--use-other-feedback",
