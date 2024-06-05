@@ -1,0 +1,17 @@
+x dne           5/24/2024 11:44:24
+x incomplete    5/26/2024 10:11:14
+o good          5/26/2024 14:14:14
+o good          5/26/2024 15:36:18
+o good          5/27/2024 11:06:55
+x incomplete    5/27/2024 14:12:42
+o good          5/28/2024 10:46:12
+o good          5/28/2024 15:30:38
+x incomplete    5/29/2024 16:42:14
+o incomplete    5/29/2024 17:34:29
+
+5 good
+4 incomplete (missing lang/pref or some iterations)
+1 dne
+
+6 pref
+7 lang
