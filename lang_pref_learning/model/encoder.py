@@ -20,7 +20,7 @@ class NLTrajAutoencoder(nn.Module):
         lang_embed_dim=768,
         lang_encoder=None,
         preprocessed_nlcomps=False,
-        use_bert_encoder=False,
+        use_lang_encoder=False,
         traj_encoder="mlp",
         use_stack_img_obs=False,
         n_frames=3,
@@ -71,8 +71,8 @@ class NLTrajAutoencoder(nn.Module):
 
         self.preprocessed_nlcomps = preprocessed_nlcomps
         # Note: the first language encoder layer is BERT.
-        self.use_bert_encoder = use_bert_encoder
-        if use_bert_encoder:
+        self.use_bert_encoder = use_lang_encoder
+        if use_lang_encoder:
             assert lang_encoder is not None
             self.lang_encoder = lang_encoder
         else:

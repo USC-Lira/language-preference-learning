@@ -15,7 +15,7 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.pref_learning.pref_dataset import LangPrefDataset, CompPrefDataset, EvalDataset
-from lang_pref_learning.pref_learning.utils import feature_aspects
+from lang_pref_learning.pref_learning.utils import rs_feature_aspects, mw_feature_aspects
 from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds
 from lang_pref_learning.model_analysis.improve_trajectory import (
@@ -27,6 +27,7 @@ from lang_pref_learning.model_analysis.improve_trajectory import (
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
 from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+from data.utils import MW_STATE_OBS_DIM, MW_ACTION_DIM, MW_PROPRIO_STATE_DIM, MW_OBJECT_STATE_DIM
 
 
 # learned and true reward func (linear for now)
@@ -96,7 +97,7 @@ def load_data(args, split='train', DEBUG=False):
     traj_img_obs = None
     actions = None
 
-    if not args.use_bert_encoder:
+    if not args.use_lang_encoder:
         nlcomp_embeds = np.load(f"{args.data_dir}/{split}/unique_nlcomps_{args.lang_model}.npy")
 
     if args.use_img_obs:
@@ -257,6 +258,7 @@ def lang_pref_learning(
     test_traj_true_rewards,
     optimal_traj_feature,
     optimizer,
+    feature_aspects,
     lr_scheduler=None,
     DEBUG=False,
 ):
@@ -281,7 +283,10 @@ def lang_pref_learning(
     optimal_learned_rewards.append(optimal_learned_reward)
     optimal_true_rewards.append(optimal_true_reward)
 
-    for it, train_lang_data in enumerate(train_lang_dataloader):
+    stop_flag = False
+    it = 0
+    while not stop_flag:
+        train_lang_data = next(iter(train_lang_dataloader))
         if it > 100:
             break
         curr_traj, curr_feature_value, idx = train_lang_data
@@ -391,6 +396,10 @@ def lang_pref_learning(
         optimal_learned_rewards.append(optimal_learned_reward)
         optimal_true_rewards.append(optimal_true_reward)
 
+        it += 1
+        if it > 100:
+            stop_flag = True
+
     return_dict = {
         "cross_entropy": eval_cross_entropies,
         "learned_reward_norms": learned_reward_norms,
@@ -420,14 +429,9 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, te
     for i, test_data in enumerate(test_dataloader):
         traj_a, traj_b, idx_a, idx_b = test_data
 
-        # get the embeddings of the two trajectories
-        traj_a_embed = traj_embeds[idx_a]
-        traj_b_embed = traj_embeds[idx_b]
-
         # get bernoulli distributions for the two trajectories
         true_rewards = torch.tensor([true_traj_rewards[idx_a], true_traj_rewards[idx_b]])
-        # make true probs 0 and 1
-        # true_probs = torch.tensor([torch.argmax(true_rewards) == 0, torch.argmax(true_rewards) == 1]).float()
+
         # make true probs with softmax
         true_probs = torch.softmax(true_rewards, dim=0).float()
 
@@ -435,6 +439,11 @@ def evaluate(test_dataloader, true_traj_rewards, learned_reward, traj_embeds, te
             learned_probs = true_probs
 
         else:
+
+            # get the embeddings of the two trajectories
+            traj_a_embed = traj_embeds[idx_a]
+            traj_b_embed = traj_embeds[idx_b]
+
             traj_a_embed = torch.tensor(traj_a_embed)
             traj_b_embed = torch.tensor(traj_b_embed)
             learned_rewards = torch.tensor([learned_reward(traj_a_embed), learned_reward(traj_b_embed)])
@@ -488,8 +497,6 @@ def run(args):
     )
     train_classified_nlcomps = train_lang_data_dict["classified_nlcomps"]
 
-    train_feature_values = np.array([get_feature_value(traj) for traj in train_trajs])
-
     # Load test data
     test_data_dict = load_data(args, split='test')
     test_trajs = test_data_dict["trajs"]
@@ -501,7 +508,17 @@ def run(args):
     # test_greater_nlcomps, test_less_nlcomps = test_data_dict['greater_nlcomps'], test_data_dict['less_nlcomps']
     # test_classified_nlcomps = test_data_dict['classified_nlcomps']
 
-    test_feature_values = np.array([get_feature_value(traj) for traj in test_trajs])
+    # Get trajectory feature values
+    if args.env == "robosuite":
+        train_feature_values = np.array([get_feature_value(traj) for traj in train_trajs])
+        test_feature_values = np.array([get_feature_value(traj) for traj in test_trajs])
+    elif args.env == "metaworld":
+        train_feature_values = np.load(f"{args.data_dir}/train/feature_vals.npy")
+        test_feature_values = np.load(f"{args.data_dir}/test/feature_vals.npy")
+        train_feature_values = np.mean(train_feature_values, axis=-1)
+        test_feature_values = np.mean(test_feature_values, axis=-1)
+        train_feature_values = train_feature_values[:, :3]
+        test_feature_values = test_feature_values[:, :3]
 
     all_features = np.concatenate([train_feature_values, test_feature_values], axis=0)
     # feature_value_mins = np.min(all_features, axis=0)
@@ -528,7 +545,7 @@ def run(args):
 
     # Current learned language encoder
     # Load the model
-    if args.use_bert_encoder:
+    if args.use_lang_encoder:
         if 't5' in args.lang_model:
             lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
         else:
@@ -552,8 +569,10 @@ def run(args):
         PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
         OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
     elif args.env == "metaworld":
-        # TODO: fill in the dimensions for metaworld
-        pass
+        STATE_OBS_DIM = MW_STATE_OBS_DIM
+        ACTION_DIM = MW_ACTION_DIM
+        PROPRIO_STATE_DIM = MW_PROPRIO_STATE_DIM
+        OBJECT_STATE_DIM = MW_OBJECT_STATE_DIM
     else:
         raise ValueError("Invalid environment")
 
@@ -565,7 +584,7 @@ def run(args):
         lang_encoder=lang_encoder,
         preprocessed_nlcomps=args.preprocessed_nlcomps,
         lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
-        use_bert_encoder=args.use_bert_encoder,
+        use_lang_encoder=args.use_lang_encoder,
         traj_encoder=args.traj_encoder,
     )
 
@@ -592,7 +611,7 @@ def run(args):
         train_nlcomps,
         model,
         device,
-        args.use_bert_encoder,
+        args.use_lang_encoder,
         tokenizer,
         nlcomps_bert_embeds=train_nlcomps_embed,
         use_img_obs=args.use_img_obs,
@@ -605,7 +624,7 @@ def run(args):
         test_nlcomps,
         model,
         device,
-        args.use_bert_encoder,
+        args.use_lang_encoder,
         tokenizer,
         nlcomps_bert_embeds=test_nlcomps_embed,
         use_img_obs=args.use_img_obs,
@@ -652,10 +671,24 @@ def run(args):
     print("Test Cross Entropy:", test_ce)
 
     # Load optimal trajectory given the true reward
-    optimal_traj = np.load(f"{args.true_reward_dir}/traj.npy").reshape(500, 69)
-    optimal_traj_feature = get_feature_value(optimal_traj)
+    if args.env == "robosuite":
+        optimal_traj = np.load(f"{args.true_reward_dir}/traj.npy").reshape(500, 69)
+        optimal_traj_feature = get_feature_value(optimal_traj)
+    elif args.env == "metaworld":
+        optimal_traj = np.load(f"{args.true_reward_dir}/traj.npy").reshape(500, 46)
+        optimal_traj_feature = np.load(args.true_reward_dir + "/traj_vals.npy")
+        optimal_traj_feature = np.mean(optimal_traj_feature, axis=-1)
+        optimal_traj_feature = optimal_traj_feature[:3]
+
     # Normalize the feature value
     optimal_traj_feature = (optimal_traj_feature - feature_value_means) / feature_value_stds
+
+    if args.env == "robosuite":
+        feature_aspects = rs_feature_aspects
+    elif args.env == "metaworld":
+        feature_aspects = mw_feature_aspects
+    else:
+        raise ValueError("Invalid environment")
 
     if args.method == "comp":
         noisy_results = comp_pref_learning(
@@ -677,25 +710,25 @@ def run(args):
             optimizer,
         )
 
-        args.use_softmax = False
-        noiseless_results = comp_pref_learning(
-            args,
-            train_comp_data,
-            test_data,
-            model,
-            train_nlcomps,
-            train_greater_nlcomps,
-            train_less_nlcomps,
-            train_classified_nlcomps,
-            learned_reward_noiseless,
-            true_reward,
-            train_traj_embeds,
-            train_lang_embeds,
-            test_traj_embeds,
-            test_traj_true_rewards,
-            optimal_traj_feature,
-            optimizer_noiseless,
-        )
+        # args.use_softmax = False
+        # noiseless_results = comp_pref_learning(
+        #     args,
+        #     train_comp_data,
+        #     test_data,
+        #     model,
+        #     train_nlcomps,
+        #     train_greater_nlcomps,
+        #     train_less_nlcomps,
+        #     train_classified_nlcomps,
+        #     learned_reward_noiseless,
+        #     true_reward,
+        #     train_traj_embeds,
+        #     train_lang_embeds,
+        #     test_traj_embeds,
+        #     test_traj_true_rewards,
+        #     optimal_traj_feature,
+        #     optimizer_noiseless,
+        # )
 
     elif args.method == "lang":
         noisy_results = lang_pref_learning(
@@ -715,27 +748,28 @@ def run(args):
             test_traj_true_rewards,
             optimal_traj_feature,
             optimizer,
+            feature_aspects,
         )
 
-        args.use_softmax = False
-        noiseless_results = lang_pref_learning(
-            args,
-            train_lang_data,
-            test_data,
-            model,
-            train_nlcomps,
-            train_greater_nlcomps,
-            train_less_nlcomps,
-            train_classified_nlcomps,
-            learned_reward_noiseless,
-            true_reward,
-            train_traj_embeds,
-            train_lang_embeds,
-            test_traj_embeds,
-            test_traj_true_rewards,
-            optimal_traj_feature,
-            optimizer_noiseless,
-        )
+        # args.use_softmax = False
+        # noiseless_results = lang_pref_learning(
+        #     args,
+        #     train_lang_data,
+        #     test_data,
+        #     model,
+        #     train_nlcomps,
+        #     train_greater_nlcomps,
+        #     train_less_nlcomps,
+        #     train_classified_nlcomps,
+        #     learned_reward_noiseless,
+        #     true_reward,
+        #     train_traj_embeds,
+        #     train_lang_embeds,
+        #     test_traj_embeds,
+        #     test_traj_true_rewards,
+        #     optimal_traj_feature,
+        #     optimizer_noiseless,
+        # )
     
     else:
         raise ValueError("Invalid method")
@@ -759,12 +793,12 @@ def run(args):
     
     # Save the results in .npz files
     save_results(args, noisy_results, postfix=postfix_noisy)
-    save_results(args, noiseless_results, postfix=postfix_noiseless)
+    # save_results(args, noiseless_results, postfix=postfix_noiseless)
 
     # Plot the results
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
     ax1.plot(noisy_results["cross_entropy"], label="Noisy")
-    ax1.plot(noiseless_results["cross_entropy"], label="Noiseless")
+    # ax1.plot(noiseless_results["cross_entropy"], label="Noiseless")
     ax1.plot([0, len(noisy_results["cross_entropy"])], [test_ce, test_ce], 'k--', label='Ground Truth')
     ax1.set_xlabel("Number of Queries")
     ax1.set_ylabel("Cross-Entropy")
@@ -772,7 +806,7 @@ def run(args):
     ax1.legend()
 
     ax2.plot(noisy_results["optimal_learned_rewards"], label="Noisy, Learned Reward")
-    ax2.plot(noiseless_results["optimal_learned_rewards"], label="Noiseless, Learned Reward")
+    # ax2.plot(noiseless_results["optimal_learned_rewards"], label="Noiseless, Learned Reward")
     ax2.plot(noisy_results["optimal_true_rewards"], label="True Reward", c="r")
     ax2.set_xlabel("Number of Queries")
     ax2.set_ylabel("Reward Value")
@@ -806,7 +840,7 @@ if __name__ == "__main__":
         help="which language model to use"
     )
     parser.add_argument(
-        "--use-bert-encoder",
+        "--use-lang-encoder",
         action="store_true",
         help="whether to use BERT in the language encoder",
     )
