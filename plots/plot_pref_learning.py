@@ -16,12 +16,7 @@ def combine_results(results, total_results):
 
 
 def load_results(base_data_dir, method, postfix):
-    total_noisy_results = {
-        'all_optimal_true_rewards': [],
-        'all_optimal_learned_rewards': [],
-        'all_eval_cross_entropies': []
-    }
-    total_noiseless_results = {
+    total_results = {
         'all_optimal_true_rewards': [],
         'all_optimal_learned_rewards': [],
         'all_eval_cross_entropies': []
@@ -39,41 +34,31 @@ def load_results(base_data_dir, method, postfix):
 
     for i in range(3):
         data_dir = f'{base_data_dir}/{i}/pref_learning'
-        noisy_results = np.load(f'{data_dir}/{method}_noisy_{postfix}.npz')
-        noiseless_results = np.load(f'{data_dir}/{method}_noiseless_{postfix}.npz')
+        single_results = np.load(f'{data_dir}/{method}_noisy_{postfix}.npz')
 
-        total_noisy_results = get_data(noisy_results, total_noisy_results)
-        total_noiseless_results = get_data(noiseless_results, total_noiseless_results)
+        total_results = get_data(single_results, total_results)
 
-    for key, value in total_noisy_results.items():
-        total_noisy_results[key] = np.concatenate(value, axis=0)
+    for key, value in total_results.items():
+        total_results[key] = np.concatenate(value, axis=0)
 
-    for key, value in total_noiseless_results.items():
-        total_noiseless_results[key] = np.concatenate(value, axis=0)
-
-    return total_noisy_results, total_noiseless_results
+    return total_results
 
 
-def plot(base_data_dir):
-    noisy_results_baseline, noiseless_results_baseline = load_results(base_data_dir, 'comp', 'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
-    noisy_results_other_feedback, noiseless_results_other_feedback = load_results(base_data_dir, 'lang',
-                                                                                  'lr_0.005_other_feedback_20_temp_1.0_lc_1.0')
-    # noisy_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos = load_results(base_data_dir,
-    #                                                                                                       'other_feedback_10_temp_cos_lc_1.0')
-    # noisy_results_other_feedback_10_temp_cos_lc, noiseless_results_other_feedback_10_temp_cos_lc = load_results(
-    #     base_data_dir,
-    #     'other_feedback_10_temp_cos_lc_1.2')
-    # noisy_results_lc_1_5, noiseless_results_lc_1_5 = load_results(base_data_dir, 'other_feedback_10_temp_cos_lc_1.5')
-    # noisy_results_lc_0_8, noiseless_results_lc_0_8 = load_results(base_data_dir, 'other_feedback_10_temp_cos_lc_0.8')
+def plot(rs_data_dir, mw_data_dir):
+    # noisy_results_baseline, noiseless_results_baseline = load_results(rs_data_dir, 'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
+    # noisy_results_other_feedback, noiseless_results_other_feedback = load_results(lang_data_dir, 'lang',
+    #                                                                               'lr_0.005_other_feedback_20_temp_1.0_lc_1.0')
+    
+    rs_comp_results = load_results(rs_data_dir, 'comp', 'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
+    rs_lang_results = load_results(rs_data_dir, 'lang', 'lr_0.005_other_feedback_20_temp_1.0_lc_1.0')
 
-    all_noisy_results = [noisy_results_baseline, noisy_results_other_feedback]
-    all_noiseless_results = [noiseless_results_baseline, noiseless_results_other_feedback]
-    labels = ["Pair-wise", "Language"]
-    # all_noisy_results = [noisy_results_other_feedback_10_temp_cos, noisy_results_other_feedback_10_temp_cos_lc,
-    #                      noisy_results_lc_1_5, noisy_results_lc_0_8]
-    # all_noiseless_results = [noiseless_results_other_feedback_10_temp_cos, noiseless_results_other_feedback_10_temp_cos_lc,
-    #                          noiseless_results_lc_1_5, noiseless_results_lc_0_8]
-    # labels = ["Other Feedback, Temp Cosine, alpha=1.0", "Other Feedback, Temp Cosine, alpha=1.2", "Other Feedback, Temp Cosine, alpha=1.5", "Other Feedback, Temp Cosine, alpha=0.8"]
+    mw_comp_results = load_results(mw_data_dir, 'comp', 'lr_0.0005_other_feedback_20_temp_1.0_lc_1.0')
+    mw_lang_results = load_results(mw_data_dir, 'lang', 'lr_0.006_other_feedback_20_temp_1.0_lc_1.0')
+
+    all_rs_results = [rs_comp_results, rs_lang_results]
+    all_mw_results = [mw_comp_results, mw_lang_results]
+    labels = ["Comparison", "Language"]
+
 
     def plot_curve_and_std(ax, mean, std, label, color='#E48B10'):
         ax.plot(
@@ -96,12 +81,12 @@ def plot(base_data_dir):
         ax[ax_idx].tick_params(axis="both", which="major", labelsize=25)
 
     colors = ['#E48B10', '#298c8c']
-    for noisy_results, noiseless_results, label, color in zip(all_noisy_results, all_noiseless_results, labels, colors):
-        # plot_curve_and_std(ax[1], np.mean(noiseless_results['all_eval_cross_entropies'], axis=0),
-        #                    np.std(noiseless_results['all_eval_cross_entropies'], axis=0), label,
-        #                    color=color)
-        plot_curve_and_std(ax[0], np.mean(noisy_results['all_eval_cross_entropies'], axis=0),
-                           np.std(noisy_results['all_eval_cross_entropies'], axis=0), label,
+    for rs_results, mw_results, label, color in zip(all_rs_results, all_mw_results, labels, colors):
+        plot_curve_and_std(ax[0], np.mean(rs_results['all_eval_cross_entropies'], axis=0),
+                           np.std(rs_results['all_eval_cross_entropies'], axis=0), label,
+                           color=color)
+        plot_curve_and_std(ax[1], np.mean(mw_results['all_eval_cross_entropies'], axis=0),
+                           np.std(mw_results['all_eval_cross_entropies'], axis=0), label,
                            color=color)
 
     ax[1].set_xlabel('Number of Queries')
@@ -116,7 +101,7 @@ def plot(base_data_dir):
 
     # set y-axis limit
     ax[0].set_ylim([0.51, 0.72])
-    ax[1].set_ylim([0.51, 0.72])
+    ax[1].set_ylim([0.38, 0.72])
 
     plt.tight_layout(pad=2.0)
     plt.subplots_adjust(wspace=0.25, hspace=0.2)
@@ -125,5 +110,6 @@ def plot(base_data_dir):
 
 
 if __name__ == '__main__':
-    base_data_dir = '../lang_pref_learning/pref_learning/true_rewards'
-    plot(base_data_dir)
+    rs_data_dir = '../lang_pref_learning/pref_learning/true_rewards_rs'
+    mw_data_dir = '../lang_pref_learning/pref_learning/true_rewards_mw'
+    plot(rs_data_dir, mw_data_dir)
