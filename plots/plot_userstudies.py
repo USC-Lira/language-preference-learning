@@ -1,3 +1,4 @@
+import matplotlib.patches as patches
 from matplotlib import rcParams
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
@@ -306,6 +307,8 @@ def iterations():
 
     fig, ax = plt.subplots()
 
+    fig.set_figwidth(fig.get_figwidth() / 1.5)
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.tick_params(axis="both", which="major", labelsize=14)  # Adjust font size of ticks
@@ -319,14 +322,19 @@ def iterations():
 
     ax.bar(lvls, count, color=improve_color, alpha=0.8, label="Count")
 
-    ax.set_title("Improve Trajectory:\nIterations to Satisfaction", fontsize=18)
+    plt.yticks(fontsize=18)
+    plt.xticks(fontsize=18)
+
+    ax.set_title("Improve Trajectory:\nIterations to Satisfaction", fontsize=23)
+    ax.set_xlabel("Number of Iterations", fontsize=21)
     ax.set_xticks(lvls)
-    ax.set_ylim([0, 5.5])
-    ax.set_xlabel("Number of Iterations")
-    ax.set_xticklabels(lvls)
+    ax.set_xticklabels(lvls, fontsize=18)
     ax.set_xlim([0, 11])
-    ax.set_ylabel("Count")
-    plt.tight_layout(pad=2.0)
+
+    ax.set_ylabel("Count", fontsize=21)
+    ax.set_yticks([0, 1, 2, 3, 4])
+    # plt.tight_layout(pad=2.0)
+    plt.tight_layout(rect=[-0.05, 0.02, 1.05, 1.03])
 
     # plt.show(block=False)
     # plt.pause(2)
@@ -600,15 +608,200 @@ def aspect():
     # # plt.pause(2)
     # # plt.close()
 
+def all_pref():
+    global cmap
+
+    plt.close()
+
+    improve_traj_exp = [5, 5, 4, 5, 5, 4, 4, 5, 4]
+    lang_exp = [4, 5, 4, 2, 5, 4, 3, 4, 2, 3]
+    pairwise_exp = [4, 5, 1, 3, 4, 1, 3, 2, 3, 3]
+
+    lang_speed = [2, 4, 4, 2, 4, 1, 4, 5, 2, 4]
+    pairwise_speed = [2, 3, 1, 3, 2, 4, 1, 3, 3, 2]
+
+    lang_adapt = [4, 4, 4, 4, 5, 2, 4, 5, 2, 5]
+    pairwise_adapt = [1, 4, 3, 4, 3, 3, 4, 1]
+
+    lang_trust = [3, 5, 4, 3, 5, 1, 3, 4, 2, 4]
+    pairwise_trust = [3, 4, 1, 4, 3, 4, 3, 3, 4, 3]
+
+    # Sample 5 colors from the colormap
+    # num_colors = 3
+    # colors = [cmap(i / (num_colors - 1)) for i in range(num_colors)]
+
+    plt.style.use('tableau-colorblind10')
+
+    fig, ax = plt.subplots()
+
+    fig.set_figwidth(fig.get_figwidth() / 1.1)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", which="major", labelsize=14)  # Adjust font size of ticks
+
+    # y axis 1-5
+    lvls = [1, 2, 3, 4, 5]
+    # x axis
+    experiments = ["Experience", "Speed", "Adaptation", "Trust"]
+
+    # avg
+    avg_lang_exp = np.mean(lang_exp)
+    avg_pairwise_exp = np.mean(pairwise_exp)
+
+    avg_lang_speed = np.mean(lang_speed)
+    avg_pairwise_speed = np.mean(pairwise_speed)
+
+    avg_lang_adapt = np.mean(lang_adapt)
+    avg_pairwise_adapt = np.mean(pairwise_adapt)
+
+    avg_lang_trust = np.mean(lang_trust)
+    avg_pairwise_trust = np.mean(pairwise_trust)
+
+    # error
+    std_lang_exp = np.std(lang_exp)
+    std_pairwise_exp = np.std(pairwise_exp)
+
+    std_lang_speed = np.std(lang_speed)
+    std_pairwise_speed = np.std(pairwise_speed)
+
+    std_lang_adapt = np.std(lang_adapt)
+    std_pairwise_adapt = np.std(pairwise_adapt)
+
+    std_lang_trust = np.std(lang_trust)
+    std_pairwise_trust = np.std(pairwise_trust)
+
+    positions = [0, 1, 2, 3]
+
+    # widtht
+    # ax.bar(positions[0], [avg_improve_traj_exp], color=colors[0], alpha=0.8, label="Average", width=0.2)
+    width = 0.4
+    ax.bar(positions[0]-(width/2), avg_lang_exp, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[0]+(width/2), avg_pairwise_exp, color=pairwise_color, alpha=0.8, width=width, label="Pairwise")
+    ax.bar(positions[1]-(width/2), avg_lang_speed, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[1]+(width/2), avg_pairwise_speed, color=pairwise_color, alpha=0.8, width=width, label="Pairwise")
+    ax.bar(positions[2]-(width/2), avg_lang_adapt, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[2]+(width/2), avg_pairwise_adapt, color=pairwise_color, alpha=0.8, width=width, label="Pairwise")
+    ax.bar(positions[3]-(width/2), avg_lang_trust, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[3]+(width/2), avg_pairwise_trust, color=pairwise_color, alpha=0.8, width=width, label="Pairwise")
+
+    ax.errorbar(positions[0]-(width/2), avg_lang_exp, yerr=std_lang_exp, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[0]+(width/2), avg_pairwise_exp, yerr=std_pairwise_exp, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[1]-(width/2), avg_lang_speed, yerr=std_lang_speed, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[1]+(width/2), avg_pairwise_speed, yerr=std_pairwise_speed, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[2]-(width/2), avg_lang_adapt, yerr=std_lang_adapt, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[2]+(width/2), avg_pairwise_adapt, yerr=std_pairwise_adapt, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[3]-(width/2), avg_lang_trust, yerr=std_lang_trust, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[3]+(width/2), avg_pairwise_trust, yerr=std_pairwise_trust, color='black', capsize=3, fmt='o', markersize=0)
+
+    # ax.errorbar(positions, [avg_lang_exp, avg_pairwise_exp, avg_lang_speed, avg_pairwise_speed, avg_lang_adapt, avg_pairwise_adapt, avg_lang_trust, avg_pairwise_trust], yerr=[std_lang_exp, std_pairwise_exp, std_lang_speed, std_pairwise_speed, std_lang_adapt, std_pairwise_adapt, std_lang_trust, std_pairwise_trust], color='black', capsize=3, fmt='o', markersize=0)
+
+    plt.xticks(positions, experiments, fontsize=20)
+    plt.yticks(fontsize=20)
+
+    ax.set_title("Preference Learning:\nAverage Score for Attributes", fontsize=24)
+    ax.set_xlabel("Attributes", fontsize=22)
+    ax.set_ylim([1, 5.5])
+    ax.set_ylabel("Average Score", fontsize=22)
+
+    plt.tight_layout(rect=[-0.06, -0.05, 1.05, 1.03])
+    # plt.tight_layout(pad=1.0)
+
+    # ax.legend(frameon=False)
+    # plt.legend(loc='upper left', fontsize=19)
+    # ax.get_legend().legend_handles[0].set_color(lang_color)
+    # ax.get_legend().legend_handles[1].set_color(pairwise_color)
+
+    r = patches.Patch(facecolor=lang_color, label='Language')
+    b = patches.Patch(facecolor=pairwise_color, label='Pairwise')
+
+    plt.legend(handles=[r,b], loc='lower right', fontsize=15)
+    plt.savefig("all_pref.png")
+
+ 
+    # plt.show(block=True)
+    # # plt.show(block=False)
+    # plt.pause(2)
+    # plt.close()
+
+def all_improve():
+    global cmap
+
+    plt.close()
+
+    improve_traj_exp = [5, 5, 4, 5, 5, 4, 4, 5, 4]
+    exp_avg = np.mean(improve_traj_exp)
+    exp_std = np.std(improve_traj_exp)
+    improve_traj_speed = [5, 4, 4, 5, 5, 5, 3, 4, 3]
+    speed_avg = np.mean(improve_traj_speed)
+    speed_std = np.std(improve_traj_speed)
+    satisfaction = [5, 5, 3, 4, 5, 5, 3, 5, 4]    
+    sat_avg = np.mean(satisfaction)
+    sat_std = np.std(satisfaction)
+
+
+    # Sample 5 colors from the colormap
+    # num_colors = 3
+    # colors = [cmap(i / (num_colors - 1)) for i in range(num_colors)]
+
+    plt.style.use('tableau-colorblind10')
+
+    fig, ax = plt.subplots()
+
+    fig.set_figwidth(fig.get_figwidth() / 1.7)
+    fig.set_figheight(fig.get_figheight() / 1.1)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", which="major", labelsize=14)  # Adjust font size of ticks
+
+    # y axis 1-5
+    lvls = [1, 2, 3, 4, 5]
+    # x axis
+    experiments = ["Experience", "Speed", "Satisfaction"]
+
+    positions = [0, 1, 2]
+
+    # widtht
+    # ax.bar(positions[0], [avg_improve_traj_exp], color=colors[0], alpha=0.8, label="Average", width=0.2)
+    width = 0.6
+    ax.bar(positions[0], exp_avg, color=improve_color, alpha=0.8, width=width)
+    ax.bar(positions[1], speed_avg, color=improve_color, alpha=0.8, width=width)
+    ax.bar(positions[2], sat_avg, color=improve_color, alpha=0.8, width=width)
+
+    ax.errorbar(positions[0], exp_avg, yerr=exp_std, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[1], speed_avg, yerr=speed_std, color='black', capsize=3, fmt='o', markersize=0)
+    ax.errorbar(positions[2], sat_avg, yerr=sat_std, color='black', capsize=3, fmt='o', markersize=0)
+
+    # ax.errorbar(positions, [avg_lang_exp, avg_pairwise_exp, avg_lang_speed, avg_pairwise_speed, avg_lang_adapt, avg_pairwise_adapt, avg_lang_trust, avg_pairwise_trust], yerr=[std_lang_exp, std_pairwise_exp, std_lang_speed, std_pairwise_speed, std_lang_adapt, std_pairwise_adapt, std_lang_trust, std_pairwise_trust], color='black', capsize=3, fmt='o', markersize=0)
+
+    plt.xticks(positions, experiments, fontsize=17)
+    plt.yticks(fontsize=18)
+    ax.set_title("Improving Trajectory:\nAverage Attribute Scores", fontsize=21)
+    ax.set_ylim([1, 5.5])
+    ax.set_xlabel("Attributes", fontsize=20)
+    ax.set_ylabel("Average Score", fontsize=20)
+
+    plt.tight_layout(rect=[-0.05,0,1.05,1])
+
+    plt.savefig("all_improve.png")
+ 
+    # plt.show(block=True)
+    # # plt.show(block=False)
+    # plt.pause(2)
+    # plt.close()
 
 
 if __name__ == "__main__":
-    satisfaction()
-    speed_improve()
-    speed_pref()
-    experience_improve()
-    experience_pref()
     iterations()
-    adaptation()
-    trust()
     aspect()
+
+    # experience_improve()
+    # speed_improve()
+    # satisfaction()
+    all_improve()
+    # experience_pref()
+    # speed_pref()
+    # adaptation()
+    # trust()
+    all_pref()

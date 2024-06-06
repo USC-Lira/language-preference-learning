@@ -1,5 +1,10 @@
 import numpy as np
 import os
+from matplotlib import rcParams
+
+rcParams["font.family"] = "serif"
+rcParams["font.serif"] = ["Palatino Linotype"]
+rcParams["font.size"] = 15
 
 # read in np file 
 file_path = "C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/optim_ratings/"
@@ -54,18 +59,28 @@ print(prefs_avg)
 
 # plot
 fig, ax = plt.subplots()
-plt.plot(langs_avg, label='Language', color=lang_color)
-plt.plot(prefs_avg, label='Preference', color=pairwise_color)
+fig.set_figwidth(fig.get_figwidth() / 1.2)
+fig.set_figheight(fig.get_figheight() / 1.2)
 
-plt.legend(loc='upper left', fontsize=14)
+plt.plot(langs_avg, label='Language', color=lang_color, linewidth=2.5)
+plt.plot(prefs_avg, label='Pairwise', color=pairwise_color, linewidth=2.5)
+
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
+
+ax.legend(frameon=False)
+plt.legend(loc='upper left', fontsize=19)
 ax.get_legend().legend_handles[0].set_color(lang_color)
 ax.get_legend().legend_handles[1].set_color(pairwise_color)
 
-plt.xlabel('Iteration', fontsize=14)
-plt.ylabel('Average Rating\n[1 Very Bad ~ 5 Very Good]', fontsize=14)
+plt.xlabel('Iteration', fontsize=20)
+plt.ylabel('Average Rating\n[1 Very Bad ~ 5 Very Good]', fontsize=19)
+
+ax.set_title("Preference Learning:\nOptimal Rating Trajectories", fontsize=22)
 
 ax.set_xticks(range(4))
-ax.set_xticklabels([5, 10, 15, 20])
+ax.set_xticklabels([5, 10, 15, 20], fontsize=18)
+plt.yticks(fontsize=18)
 
 # error
 langs_std = np.std(langs, axis=1)
@@ -75,13 +90,15 @@ prefs_std = np.std(prefs, axis=1)
 plt.fill_between(range(4), langs_avg - langs_std, langs_avg + langs_std, alpha=0.1, color=lang_color)
 plt.fill_between(range(4), prefs_avg - prefs_std, prefs_avg + prefs_std, alpha=0.1, color=pairwise_color)
 
+plt.tight_layout(rect=[-0.03, -0.05, 1.02, 1.03])
+
 
 
 plt.savefig('C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/avg_ratings.png')
 
-plt.show(block=False)
-plt.pause(3)
-plt.close()
+# plt.show(block=False)
+# plt.pause(3)
+# plt.close()
 
     # pref_comp_20240526_112531.npy
     # 0 :  [1]
