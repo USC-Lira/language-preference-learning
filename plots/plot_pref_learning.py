@@ -49,15 +49,15 @@ def plot(rs_data_dir, mw_data_dir):
     # noisy_results_other_feedback, noiseless_results_other_feedback = load_results(lang_data_dir, 'lang',
     #                                                                               'lr_0.005_other_feedback_20_temp_1.0_lc_1.0')
     
-    rs_comp_results = load_results(rs_data_dir, 'comp', 'lr_0.004_other_feedback_10_temp_1.0_lc_1.0')
-    rs_lang_results = load_results(rs_data_dir, 'lang', 'lr_0.005_other_feedback_20_temp_1.0_lc_1.0')
+    rs_comp_results = load_results(rs_data_dir, 'comp', 'lr_0.008_other_feedback_20_temp_1.0_lc_1.0')
+    rs_lang_results = load_results(rs_data_dir, 'lang', 'lr_0.01_other_feedback_20_temp_1.0_lc_1.0_lang_pref')
 
-    mw_comp_results = load_results(mw_data_dir, 'comp', 'lr_0.0005_other_feedback_20_temp_1.0_lc_1.0')
-    mw_lang_results = load_results(mw_data_dir, 'lang', 'lr_0.006_other_feedback_20_temp_1.0_lc_1.0')
+    mw_comp_results = load_results(mw_data_dir, 'comp', 'lr_0.0006_other_feedback_10_temp_1.0_lc_1.0')
+    mw_lang_results = load_results(mw_data_dir, 'lang', 'lr_0.006_other_feedback_20_temp_1.0_lc_1.0_lang_pref')
 
-    all_rs_results = [rs_comp_results, rs_lang_results]
-    all_mw_results = [mw_comp_results, mw_lang_results]
-    labels = ["Comparison", "Language"]
+    all_rs_results = [rs_lang_results, rs_comp_results]
+    all_mw_results = [mw_lang_results, mw_comp_results]
+    labels = ["Language", "Comparison"]
 
 
     def plot_curve_and_std(ax, mean, std, label, color='#E48B10'):
@@ -73,7 +73,7 @@ def plot(rs_data_dir, mw_data_dir):
                         color=color)
 
     # Plot cross-entropies
-    fig, ax = plt.subplots(1, 2, figsize=(20, 9))
+    fig, ax = plt.subplots(1, 2, figsize=(18, 9))
 
     for ax_idx in range(2):
         ax[ax_idx].spines["top"].set_visible(False)
@@ -106,6 +106,55 @@ def plot(rs_data_dir, mw_data_dir):
     plt.tight_layout(pad=2.0)
     plt.subplots_adjust(wspace=0.25, hspace=0.2)
     plt.savefig(f'pref_learning_comparison.pdf', dpi=250)
+    plt.show()
+
+
+    # Plot the rewards of optimal trajectories
+    fig, ax = plt.subplots(1, 2, figsize=(18, 9))
+    for ax_idx in range(2):
+        ax[ax_idx].spines["top"].set_visible(False)
+        ax[ax_idx].spines["right"].set_visible(False)
+        ax[ax_idx].tick_params(axis="both", which="major", labelsize=25)
+
+    for rs_results, mw_results, label, color in zip(all_rs_results, all_mw_results, labels, colors):
+        rs_traj_rewards = rs_results['all_optimal_learned_rewards']
+        print(rs_traj_rewards.shape)
+        rs_optimal_rewards = np.mean(rs_results['all_optimal_true_rewards'], axis=1)
+        # broadcast to the same shape
+        rs_optimal_rewards = np.tile(rs_optimal_rewards[:, np.newaxis], (1, rs_traj_rewards.shape[1]))
+        
+        rs_traj_rewards = rs_traj_rewards / rs_optimal_rewards
+        rs_traj_rewards = rs_traj_rewards[:, 1: -1]
+        
+        mw_traj_rewards = mw_results['all_optimal_learned_rewards']
+        mw_optimal_rewards = np.mean(mw_results['all_optimal_true_rewards'], axis=0)
+        mw_traj_rewards = mw_traj_rewards / mw_optimal_rewards
+        mw_traj_rewards = mw_traj_rewards[:, 1: -1]
+
+        plot_curve_and_std(ax[0], np.mean(rs_traj_rewards, axis=0),
+                           np.std(rs_traj_rewards, axis=0), label,
+                           color=color)
+        plot_curve_and_std(ax[1], np.mean(mw_traj_rewards, axis=0),
+                            np.std(mw_traj_rewards, axis=0), label,
+                            color=color)
+    
+    ax[1].set_xlabel('Number of Queries')
+    ax[1].set_ylabel('Reward')
+    # ax[0].legend(fontsize=25, frameon=False)
+    ax[1].set_title('Meta-World')
+
+    ax[0].set_xlabel('Number of Queries')
+    ax[0].set_ylabel('Reward')
+    ax[0].legend(fontsize=32, frameon=False)
+    ax[0].set_title('Robosuite')
+
+    # set y-axis limit
+    ax[0].set_ylim([-0.1, 1.2])
+    ax[1].set_ylim([-0.1, 1.2])
+
+    plt.tight_layout(pad=2.0)
+    plt.subplots_adjust(wspace=0.18, hspace=0.2)
+    plt.savefig(f'pref_learning_comparison_rewards.pdf', dpi=250)
     plt.show()
 
 

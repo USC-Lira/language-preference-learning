@@ -17,11 +17,11 @@ all_trajs_features = all_trajs_features[:, :3]
 
 for i in range(3, 4):
     true_reward = all_rewards[i]
-    np.save(f"{1}/true_rewards.npy", true_reward)
+    np.save(f"{2}/true_rewards.npy", true_reward)
 
     true_reward_values = np.dot(all_trajs_features, true_reward)
     best_traj_idx = np.argmax(true_reward_values)
 
-    np.save(f"{1}/traj.npy", all_trajs[best_traj_idx])
-    np.save(f"{1}/traj_vals.npy", all_trajs_features_ori[best_traj_idx])
+    np.save(f"{2}/traj.npy", all_trajs[best_traj_idx])
+    np.save(f"{2}/traj_vals.npy", all_trajs_features_ori[best_traj_idx])
 
