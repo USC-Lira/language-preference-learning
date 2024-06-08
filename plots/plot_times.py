@@ -111,7 +111,7 @@ def plot_lang():
 
     ax.set_ylim(0, 15)
 
-    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/time_lang.png")
+    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/time_lang.pdf")
 
 
     plt.show(block=False)
@@ -200,11 +200,11 @@ def plot_pair():
     ax.set_xticks(bins)
     ax.set_xticklabels(bins)
 
-    plt.title("Pairwise Preference Learning:\nTime Per Query", fontsize=14)
+    plt.title("Comparison Preference Learning:\nTime Per Query", fontsize=14)
 
     ax.set_ylim(0, 15)
 
-    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/time_pair.png")
+    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/time_pair.pdf")
 
 
     plt.show(block=False)
@@ -250,7 +250,7 @@ def plot_avg():
     fig, ax = plt.subplots()
 
     fig.set_figwidth(fig.get_figwidth() / 1.8)
-    fig.set_figheight(fig.get_figheight() / 1.2)
+    fig.set_figheight(fig.get_figheight() / 1.4)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -259,9 +259,13 @@ def plot_avg():
     # y axis 1-5
     lvls = [1, 2, 3, 4, 5]
     # x axis
-    experiments = ["Language", "Pairwise"]
+    experiments = ["Language", "Comparison"]
 
     positions = [0.4, 0.7, 0.85]
+
+
+    print("lang avg: ", all_lang_avg)
+    print("pair avg: ", all_pair_avg)
 
     # plot
     # ax.bar(positions[0], avg_improve_traj_speed, color=colors[0], alpha=0.8, label="Average", width=0.2)
@@ -278,15 +282,96 @@ def plot_avg():
     ax.set_xlabel("Method", fontsize=20)
 
     # plt.tight_layout(pad=1.0)
-    plt.tight_layout(rect=[-0.03,-0.075,0.9,1])
+    plt.tight_layout(rect=[-0.02,-0.05,0.9,1])
     # plt.show(block=True)
     # plt.show(block=False)
     # plt.pause(10)
     # plt.close()
 
-    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/avgtime_both.png")
+    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/avgtime_both.pdf")
+
+def plot_all():
+    lang_color = "#F79646"
+    pairwise_color = "#4BACC6"
+
+    xiang_lang  = [40, 38, 51, 33, 33, 44, 26, 35, 38, 32, 32, 39, 37, 41, 26, 35, 25, 41, 30, 32]
+    bas_lang_1  = [70, 175, 127, 74, 104, 98, 65, 85, 50, 83, 53, 84, 60, 95, 137, 54, 70, 35, 60, 120, 56, 91, 21, 136, 123, 56, 104, 64, 39, 61]
+    shreya_lang = [41, 59, 47, 31, 64, 40, 40, 59, 48, 60, 48, 30, 53, 40, 37, 40, 44, 33, 41, 35]
+    eisuke_lang = [87, 50, 36, 27, 28, 35, 35, 44, 32, 39, 40, 42, 39, 42, 27, 30, 26, 30, 31, 31]
+    cait_lang   = [119, 92, 53, 101, 47, 56, 40, 87, 107, 31, 45, 55, 45, 62, 37, 44, 50, 37, 44, 53]
+
+    xiang_pair  = [64, 61, 73, 63, 76, 81, 68, 59, 50, 51, 59, 45, 48, 63, 55, 58, 59, 48, 61, 48]
+    bas_pair    = [51, 51, 37, 60, 71, 66, 57, 57, 67, 54, 73, 39, 62, 57, 73, 60, 55, 73, 44, 72]
+    shreya_pair = [73, 75, 54, 54, 52, 53, 57, 56, 54, 46, 69, 57, 64, 59, 58, 62, 46, 45, 62, 46]
+    eisuke_pair = [65, 48, 76, 57, 56, 63, 49, 54, 78, 56, 82, 50, 64, 47, 59, 51, 44, 64, 40, 54]
+    cait_pair1  = [42, 68, 67, 58, 45, 70, 66, 56, 72, 52, 53, 55, 57, 64, 59, 62]
+
+    langs = xiang_lang + bas_lang_1 + shreya_lang + eisuke_lang + cait_lang
+    pairs = xiang_pair + bas_pair + shreya_pair + eisuke_pair + cait_pair1
+
+    avg_langs = np.mean(langs)
+    avg_pairs = np.mean(pairs)
+
+    std_langs = np.std(langs)
+    std_pairs = np.std(pairs)
+
+    all_counts_pairs = np.array([0] * 18)
+    all_counts_langs = np.array([0] * 18)
+    for l in langs:
+        all_counts_langs[l // 10] += 1
+    for p in pairs:
+        all_counts_pairs[p // 10] += 1
+    width = 4
+
+    # plot
+    fig, ax = plt.subplots()
+
+    bins = np.arange(0, 190, 10)
+    print(bins)
+
+    for i in range(len(bins) - 1):
+        sum = 0
+        print("bin: ", i, " count: ", all_counts_langs[i])
+        print("bin: ", i, " count: ", all_counts_pairs[i])
+        ax.bar(bins[i]-(width/2), all_counts_langs[i], color=lang_color, alpha=0.8, label="Language", width=width, align='edge')
+        ax.bar(bins[i]+(width/2), all_counts_pairs[i], color=pairwise_color, alpha=0.8, label="Comparison", width=width, align='edge')
+        print("----------")
+
+    ax.legend(["Language", "Pairwise"], loc="upper right", fontsize=18)
+    # mod colors
+    ax.get_legend().legend_handles[0].set_color(lang_color)
+    ax.get_legend().legend_handles[1].set_color(pairwise_color)
+
+    ax.axvspan(avg_langs - std_langs, avg_langs + std_langs, color=lang_color, alpha=0.1)
+    ax.axvspan(avg_pairs - std_pairs, avg_pairs + std_pairs, color=pairwise_color, alpha=0.1)
+
+    # ax.autoscale(tight=True)
+    plt.tight_layout(rect=[0.04, 0.04, 0.95, 0.95])
+
+    plt.xlabel('Time (s)', fontsize=18)
+    plt.ylabel('Count', fontsize=18)
+
+    ax.set_xticks(bins)
+    ax.set_xticklabels(bins)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    # legend
+
+    plt.title("Time Per Query", fontsize=20)
+
+    ax.set_ylim(0, 40)
+
+    plt.savefig("C:/Users/Rosies/Desktop/Things/LiraLab/CoRL_2025/figures/time_all.pdf")
+
+
+    plt.show(block=False)
+    plt.pause(3)
+    plt.close()
 
 if __name__ == "__main__":
     # plot_lang()
     # plot_pair()
     plot_avg()
+    plot_all()

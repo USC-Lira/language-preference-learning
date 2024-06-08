@@ -477,7 +477,7 @@ def aspect():
 "Adaptability",     "Time efficiency",      "Not Convenience", 
 "Adaptability",     "Time efficiency",      "Not Convenience"]
     
-    pairwise_aspects = [
+    pairwise_aspects = [avg_ratin
                                     "Convenience",
 "Adaptability",                     "Convenience",
 "None of them",
@@ -660,15 +660,6 @@ def all_pref():
     avg_lang_trust = np.mean(lang_trust)
     avg_pairwise_trust = np.mean(pairwise_trust)
 
-    print("avg_lang_exp:", avg_lang_exp)
-    print("avg_pairwise_exp:", avg_pairwise_exp)
-    print("avg_lang_speed:", avg_lang_speed)
-    print("avg_pairwise_speed:", avg_pairwise_speed)
-    print("avg_lang_adapt:", avg_lang_adapt)
-    print("avg_pairwise_adapt:", avg_pairwise_adapt)
-    print("avg_lang_trust:", avg_lang_trust)
-    print("avg_pairwise_trust:", avg_pairwise_trust)
-
     # error
     std_lang_exp = np.std(lang_exp)
     std_pairwise_exp = np.std(pairwise_exp)
@@ -682,23 +673,21 @@ def all_pref():
     std_lang_trust = np.std(lang_trust)
     std_pairwise_trust = np.std(pairwise_trust)
 
-    width = 0.4
     positions = [0, 1, 2, 3]
     positions_lang = [i - (width/2) for i in positions]
     positions_pair = [i + (width/2) for i in positions]
 
     # widtht
     # ax.bar(positions[0], [avg_improve_traj_exp], color=colors[0], alpha=0.8, label="Average", width=0.2)
-    temp_langs = [avg_lang_exp, avg_lang_speed, avg_lang_adapt, avg_lang_trust]
-    temp_pairs = [avg_pairwise_exp, avg_pairwise_speed, avg_pairwise_adapt, avg_pairwise_trust]
-    ax.bar(positions_lang, temp_langs, color=lang_color, alpha=0.8, width=width, label="Language")
-    ax.bar(positions_pair, temp_pairs, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
-    # ax.bar(positions[1]-(width/2), avg_lang_speed, color=lang_color, alpha=0.8, width=width, label="Language")
-    # ax.bar(positions[1]+(width/2), avg_pairwise_speed, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
-    # ax.bar(positions[2]-(width/2), avg_lang_adapt, color=lang_color, alpha=0.8, width=width, label="Language")
-    # ax.bar(positions[2]+(width/2), avg_pairwise_adapt, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
-    # ax.bar(positions[3]-(width/2), avg_lang_trust, color=lang_color, alpha=0.8, width=width, label="Language")
-    # ax.bar(positions[3]+(width/2), avg_pairwise_trust, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
+    width = 0.4
+    ax.bar(positions[0]-(width/2), avg_lang_exp, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[0]+(width/2), avg_pairwise_exp, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
+    ax.bar(positions[1]-(width/2), avg_lang_speed, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[1]+(width/2), avg_pairwise_speed, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
+    ax.bar(positions[2]-(width/2), avg_lang_adapt, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[2]+(width/2), avg_pairwise_adapt, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
+    ax.bar(positions[3]-(width/2), avg_lang_trust, color=lang_color, alpha=0.8, width=width, label="Language")
+    ax.bar(positions[3]+(width/2), avg_pairwise_trust, color=pairwise_color, alpha=0.8, width=width, label="Comparison")
 
     ax.errorbar(positions[0]-(width/2), avg_lang_exp, yerr=std_lang_exp, color='black', capsize=3, fmt='o', markersize=0)
     ax.errorbar(positions[0]+(width/2), avg_pairwise_exp, yerr=std_pairwise_exp, color='black', capsize=3, fmt='o', markersize=0)
@@ -714,7 +703,7 @@ def all_pref():
     plt.xticks(positions, experiments, fontsize=20)
     plt.yticks(fontsize=20)
 
-    ax.set_title("Preference Learning:\nAverage Score for Attributes", fontsize=21)
+    ax.set_title("Preference Learning:\nAverage Score for Attributes", fontsize=24)
     ax.set_xlabel("Attributes", fontsize=22)
     ax.set_ylim([1, 5.5])
     ax.set_ylabel("Average Score", fontsize=22)
@@ -727,16 +716,11 @@ def all_pref():
     # ax.get_legend().legend_handles[0].set_color(lang_color)
     # ax.get_legend().legend_handles[1].set_color(pairwise_color)
 
-    # r = patches.Patch(facecolor=lang_color, label='Language')
-    # b = patches.Patch(facecolor=pairwise_color, label='Comparison')
+    r = patches.Patch(facecolor=lang_color, label='Language')
+    b = patches.Patch(facecolor=pairwise_color, label='Comparison')
 
-    # plt.legend(loc='lower right', fontsize=13)
-    # plt.legend().get_frame().set_alpha(0)
-    legend = plt.legend(bbox_to_anchor=(0.2, 1.05), loc='upper left', fontsize=12)
-    legend.get_frame().set_facecolor('none')
-    legend.get_frame().set_edgecolor('none')
+    plt.legend(handles=[r,b], loc='lower right', fontsize=15)
     plt.savefig("all_pref.pdf")
-    plt.savefig("all_pref.png")
 
  
     # plt.show(block=True)
@@ -769,7 +753,7 @@ def all_improve():
     fig, ax = plt.subplots()
 
     fig.set_figwidth(fig.get_figwidth() / 1.7)
-    fig.set_figheight(fig.get_figheight() / 1.4)
+    fig.set_figheight(fig.get_figheight() / 1.45)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -798,9 +782,11 @@ def all_improve():
     plt.xticks(positions, experiments, fontsize=17)
     plt.yticks(fontsize=18)
     ax.set_title("Improve Trajectory:\nAverage Attribute Scores", fontsize=21)
-    ax.set_ylim([1, 6])
+    # ax.set_ylim([1, 6])
     ax.set_xlabel("Attributes", fontsize=20)
     ax.set_ylabel("Average Score", fontsize=20)
+    ax.set_yticks([1, 2, 3, 4, 5])
+    ax.set_yticklabels([1, 2, 3, 4, 5])
 
     plt.tight_layout(rect=[-0.05,0,1.05,1])
 
