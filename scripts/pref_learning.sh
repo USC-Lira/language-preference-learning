@@ -12,4 +12,6 @@ python lang_pref_learning/pref_learning/pref_based_learning.py \
 --num-iterations=1 \
 --use-softmax \
 --use-constant-temp \
+--use-other-feedback \
+--num-other-feedback=20 \
 --use-img-obs --use-other-feedback --num-other-feedback=20 \
