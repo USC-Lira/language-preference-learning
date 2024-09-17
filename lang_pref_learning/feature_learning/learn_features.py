@@ -277,8 +277,8 @@ def train(logger, args):
         seq_len=int(args.seq_len * args.resample_factor),
     )
 
-    if not args.finetune_lang_model_name:
-        # Freeze BERT in the first training stage
+    if not args.finetune_lang_model:
+        # Freeze the languge model in the first training stage
         for param in model.lang_encoder.parameters():
             param.requires_grad = False
     else:
@@ -532,7 +532,7 @@ if __name__ == "__main__":
     parser.add_argument("--finetune-lang-model", action="store_true", help="whether to finetune BERT")
     parser.add_argument("--save-dir", type=str, default="feature_learning/", help="where to save the model")
     parser.add_argument(
-        "--lang-model",
+        "--lang-model-name",
         type=str,
         default="t5-base",
         choices=["t5-small", "t5-base", "bert-base", "bert-mini", "bert-tiny", ],

@@ -37,29 +37,29 @@ def preprocess_strings(nlcomp_dir, lang_model_name, nlcomp_list=None, id_mapping
         np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes.npy'), np.asarray(nlcomp_indexes, dtype=np.int32))
 
     # Get the embeddings for the unique nlcomps
-    unbatched_input = unique_nlcomps
-    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[lang_model_name])
-    model = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[lang_model_name])
-    lang_embeddings = []
-    for sentence in unbatched_input:
-        inputs = tokenizer(sentence, return_tensors="pt")
-        outputs = model(**inputs)
-        embedding = outputs.last_hidden_state
+    # unbatched_input = unique_nlcomps
+    # tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[lang_model_name])
+    # model = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[lang_model_name])
+    # lang_embeddings = []
+    # for sentence in unbatched_input:
+    #     inputs = tokenizer(sentence, return_tensors="pt")
+    #     outputs = model(**inputs)
+    #     embedding = outputs.last_hidden_state
 
-        # Average across the sequence to get a sentence-level embedding
-        embedding = torch.mean(embedding, dim=1, keepdim=False)
-        lang_embeddings.append(embedding.detach().numpy())
+    #     # Average across the sequence to get a sentence-level embedding
+    #     embedding = torch.mean(embedding, dim=1, keepdim=False)
+    #     lang_embeddings.append(embedding.detach().numpy())
 
-    if id_mapping:
-        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(lang_model_name))
-    else:
-        outfile = os.path.join(nlcomp_dir, 'nlcomps.npy')
+    # if id_mapping:
+    #     outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(lang_model_name))
+    # else:
+    #     outfile = os.path.join(nlcomp_dir, 'nlcomps.npy')
 
-    lang_embeddings = np.concatenate(lang_embeddings, axis=0)
-    print(lang_embeddings.shape)
-    if save:
-        np.save(outfile, lang_embeddings)
-    return lang_embeddings
+    # lang_embeddings = np.concatenate(lang_embeddings, axis=0)
+    # print(lang_embeddings.shape)
+    # if save:
+    #     np.save(outfile, lang_embeddings)
+    # return lang_embeddings
 
 
 if __name__ == '__main__':
@@ -67,8 +67,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--data-dir', type=str, default='', help='')
     parser.add_argument('--batch-size', type=int, default=5000, help='')
-    parser.add_argument('--id-mapping', default=True, help='')
-    parser.add_argument('--lang-model', default='bert-base', help='Which BERT model to use')
+    parser.add_argument('--lang-model-name', default='bert-base', help='Which lang model to use')
 
     args = parser.parse_args()
-    preprocess_strings(args.data_dir, args.lang_model_name, id_mapping=args.id_mapping, save=True)
+    preprocess_strings(args.data_dir, args.lang_model_name, id_mapping=True, save=True)
