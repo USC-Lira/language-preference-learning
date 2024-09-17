@@ -1,14 +1,15 @@
 python lang_pref_learning/pref_learning/pref_based_learning.py \
+--env=robosuite \
 --method=comp \
---data-dir=data/data_pref_learning \
+--data-dir=PATH_TO_DATA_DIR \
 --model-dir=exp/robosuite-img-obs-t5-small_20240508_211847_lr_0.001_schedule_False \
---true-reward-dir=lang_pref_learning/pref_learning/true_rewards/$1 \
+--true-reward-dir=lang_pref_learning/pref_learning/true_rewards_rs/$1 \
 --traj-encoder=cnn \
---lang-model=t5-small --use-bert-encoder \
+--lang-model-name=t5-small \
 --seed=1234 \
 --lr=8e-3 \
 --weight-decay=0.1 \
 --num-iterations=1 \
 --use-softmax \
---lang-temp=1.0 --use-constant-temp \
+--use-constant-temp \
 --use-img-obs --use-other-feedback --num-other-feedback=20 \

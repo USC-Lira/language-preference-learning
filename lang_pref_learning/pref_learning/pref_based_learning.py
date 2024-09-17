@@ -23,7 +23,7 @@ from lang_pref_learning.model_analysis.improve_trajectory import (
     get_feature_value,
     get_lang_feedback,
 )
-from lang_pref_learning.pref_learning.utils import load_data, save_results, plot_results
+from lang_pref_learning.pref_learning.utils import load_data, get_lang_feedback_aspect, get_optimal_traj, save_results, plot_results
 
 # from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
 from data.utils import env_dims
@@ -51,49 +51,6 @@ class RewardFunc(nn.Module):
 
     def forward(self, x):
         return self.linear(x)
-
-
-def get_lang_feedback_aspect(curr_feature, reward, optimal_traj_feature, noisy=False, temperature=1.0):
-    """
-    Get language feedback based on feature value and true reward function
-
-    Args:
-        curr_feature: the feature value of the current trajectory
-        reward: the true reward function
-        optimal_traj_feature: the feature value of the optimal trajectory
-        noisy: whether to add noise to the feedback
-        temperature: the temperature for the softmax
-
-    Returns:
-        feature_idx: the index of the feature to give feedback on
-        pos: whether the feedback is positive or negative
-    """
-    # potential_pos = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
-    # potential_neg = torch.tensor(reward * (curr_feature.numpy() - optimal_traj_feature))
-    # potential = torch.cat([potential_pos, potential_neg], dim=1)
-    potential = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
-    potential = potential / temperature
-    probs = torch.softmax(potential, dim=1)
-    if noisy:
-        # sample a language comparison with the probabilities
-        feature_idx = torch.multinomial(probs, 1).item()
-    else:
-        feature_idx = torch.argmax(probs).item()
-    if optimal_traj_feature[feature_idx] - curr_feature[0, feature_idx] > 0:
-        pos = True
-    else:
-        pos = False
-
-    return feature_idx, pos
-
-
-def get_optimal_traj(learned_reward, traj_embeds, traj_true_rewards):
-    # Fine the optimal trajectory with learned reward
-    learned_rewards = torch.tensor([learned_reward(torch.from_numpy(traj_embed)) for traj_embed in traj_embeds])
-    optimal_learned_reward = traj_true_rewards[torch.argmax(learned_rewards)]
-    optimal_true_reward = traj_true_rewards[torch.argmax(torch.tensor(traj_true_rewards))]
-
-    return optimal_learned_reward, optimal_true_reward
 
 
 def comp_pref_learning(
@@ -443,18 +400,13 @@ def run(args):
 
     # Current learned language encoder
     # Load the model
-    if args.use_lang_encoder:
-        if 't5' in args.lang_model_name:
-            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
-        else:
-            lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
-
-        tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
-        feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
+    if 't5' in args.lang_model_name:
+        lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
     else:
-        lang_encoder = None
-        tokenizer = None
-        feature_dim = 128
+        lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+
+    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+    feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
     
     STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM = env_dims.get(args.env, None)
     
@@ -468,7 +420,6 @@ def run(args):
         decoder_hidden_dim=args.decoder_hidden_dim,
         lang_encoder=lang_encoder,
         lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model_name],
-        use_lang_encoder=args.use_lang_encoder,
         traj_encoder=args.traj_encoder,
     )
 
@@ -495,7 +446,6 @@ def run(args):
         train_nlcomps,
         model,
         device,
-        args.use_lang_encoder,
         tokenizer,
         nlcomps_bert_embeds=train_nlcomps_embed,
         use_img_obs=args.use_img_obs,
@@ -508,7 +458,6 @@ def run(args):
         test_nlcomps,
         model,
         device,
-        args.use_lang_encoder,
         tokenizer,
         nlcomps_bert_embeds=test_nlcomps_embed,
         use_img_obs=args.use_img_obs,
@@ -641,12 +590,8 @@ if __name__ == "__main__":
     parser.add_argument("--decoder-hidden-dim", type=int, default=128)
     parser.add_argument(
         "--lang-model-name", 
-        type=str, default="t5-small", 
-        choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
+        type=str, default="t5-small", choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
         help="which language model to use"
-    )
-    parser.add_argument("--use-lang-encoder",action="store_true", 
-                        help="whether to use the pre-trained language model in the language encoder",
     )
     parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
     parser.add_argument(
@@ -666,8 +611,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-other-feedback", action="store_true", help="whether to use other feedback",)
     parser.add_argument("--use-constant-temp", action="store_true", help="whether to use constant temperature",)
     parser.add_argument(
-        "--num-other-feedback",
-        default=10, type=int,
+        "--num-other-feedback", default=10, type=int,
         help="number of other feedback to use",
     )
     parser.add_argument(

@@ -550,7 +550,7 @@ if __name__ == "__main__":
     parser.add_argument("--encoder-hidden-dim", type=int, default=128)
     parser.add_argument("--decoder-hidden-dim", type=int, default=128)
     parser.add_argument(
-        "--lang-model", type=str, default="t5-small", 
+        "--lang-model-name", type=str, default="t5-small", 
         choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
         help="which language model to use"
     )

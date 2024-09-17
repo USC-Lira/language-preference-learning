@@ -6,7 +6,7 @@ import json
 
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
-from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
+from lang_pref_learning.feature_learning.utils import HF_LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds
 
@@ -16,53 +16,42 @@ from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_S
 
 
 
-def get_nearest_embed_distance(embed, lang_embed, embeds, index=None):
+def get_nearest_embed(embed, lang_embed, embeds, index=None, metric='distance'):
     """
         Get the nearest embedding to embed from embeds
         Input:
             embed: the embedding to compare to
+            lang_embed: the language embedding to add to the original embedding
             embeds: the list of embeddings to compare against
+            index: the index to exclude from comparison (optional)
+            metric: the metric to use for comparison, can be 'distance' or 'cosine' or 'projection' (default is 'distance')
         Output:
             the index of the nearest embedding in embeds
     """
-    new_embed = embed + lang_embed
-    norm = np.linalg.norm(embeds - new_embed, axis=1)
-    if index:
-        norm = np.delete(norm, index)
-    return np.argmin(norm)
-
-
-def get_nearest_embed_cosine(embed, lang_embed, embeds, index=None):
-    """
-        Get the nearest embedding to embed from embeds
-        Input:
-            embed: the embedding to compare to
-            embeds: the list of embeddings to compare against
-        Output:
-            the index of the nearest embedding in embeds
-    """
-    cos_sim = np.dot(embeds, embed + lang_embed) / (
-            np.linalg.norm(embeds, axis=1) * np.linalg.norm(embed + lang_embed))
-    if index:
-        cos_sim = np.delete(cos_sim, index)
-    return np.argmax(cos_sim)
-
-
-def get_nearest_embed_project(embed, lang_embed, embeds, index=None):
-    """
-        Get the nearest embedding based on the projection
-        Input:
-            embed: the embedding to compare to
-            embeds: the list of embeddings to compare against
-        Output:
-            the index of the nearest embedding in embeds
-    """
-    new_embed = embed + lang_embed
-    embeds_norm = np.linalg.norm(embeds, axis=1)
-    proj = np.dot(embeds, new_embed) / embeds_norm
-    if index:
-        proj = np.delete(proj, index)
-    return np.argmax(proj)
+    if metric == 'distance':
+        new_embed = embed + lang_embed
+        norm = np.linalg.norm(embeds - new_embed, axis=1)
+        if index:
+            norm = np.delete(norm, index)
+        return np.argmin(norm)
+    
+    elif metric == 'cosine':
+        cos_sim = np.dot(embeds, embed + lang_embed) / (
+                np.linalg.norm(embeds, axis=1) * np.linalg.norm(embed + lang_embed))
+        if index:
+            cos_sim = np.delete(cos_sim, index)
+        return np.argmax(cos_sim)
+    
+    elif metric == 'projection':
+        new_embed = embed + lang_embed
+        embeds_norm = np.linalg.norm(embeds, axis=1)
+        proj = np.dot(embeds, new_embed) / embeds_norm
+        if index:
+            proj = np.delete(proj, index)
+        return np.argmax(proj)
+    
+    else:
+        raise ValueError("Invalid metric. Must be 'distance', 'cosine', or 'projection'")
     
 
 
@@ -87,30 +76,25 @@ def get_feature_class(nlcomp, classified_nlcomps):
     return value_func, feature_name
 
 
-def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, decoder_hidden_dim, preprocessed_nlcomps,
+def main(model_dir, data_dir, lang_model_name, encoder_hidden_dim, decoder_hidden_dim,
          old_model=False, traj_encoder='mlp', debug=False):
     # Load the val trajectories and language comparisons first
     trajs = np.load(f'{data_dir}/test/trajs.npy')
     nlcomps = json.load(open(f'{data_dir}/test/unique_nlcomps.json', 'rb'))
-    nlcomps_bert_embeds = np.load(f'{data_dir}/test/unique_nlcomps_{bert_model}.npy')
+    nlcomps_bert_embeds = np.load(f'{data_dir}/test/unique_nlcomps_{lang_model_name}.npy')
     classified_nlcomps = json.load(open(f'data/classified_nlcomps.json', 'rb'))
     greater_nlcomps = json.load(open(f'data/greater_nlcomps.json', 'rb'))
     less_nlcomps = json.load(open(f'data/less_nlcomps.json', 'rb'))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the model
-    if args.use_bert_encoder:
-        if 't5' in args.lang_model:
-            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
-        else:
-            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-
-        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
+    if 't5' in args.lang_model_name:
+        lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
     else:
-        lang_encoder = None
-        tokenizer = None
-        feature_dim = 128
+        lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+
+    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+    feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
 
     if args.env == "robosuite":
         STATE_OBS_DIM = RS_STATE_OBS_DIM
@@ -131,8 +115,8 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
     model = NLTrajAutoencoder(STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
                               encoder_hidden_dim=encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=decoder_hidden_dim, lang_encoder=lang_encoder,
-                              preprocessed_nlcomps=preprocessed_nlcomps, bert_output_dim=LANG_OUTPUT_DIM[bert_model],
-                              use_bert_encoder=use_bert_encoder, traj_encoder=traj_encoder)
+                              bert_output_dim=LANG_OUTPUT_DIM[lang_model_name],
+                              traj_encoder=traj_encoder)
 
     state_dict = torch.load(os.path.join(model_dir, 'best_model_state_dict.pth'))
 
@@ -150,8 +134,7 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
     model.eval()
 
     # Get embeddings for the trajectories and language comparisons
-    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, use_bert_encoder, tokenizer,
-                                                    nlcomps_bert_embeds)
+    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, tokenizer, nlcomps_bert_embeds)
 
     # Get the nearest trajectory embedding given the language embedding
     total = 0
@@ -164,7 +147,7 @@ def main(model_dir, data_dir, use_bert_encoder, bert_model, encoder_hidden_dim, 
             nlcomp = nlcomps[i]
             # Get the feature class and values for the trajectories
             value_func, feature_name = get_feature_class(nlcomp, classified_nlcomps)
-            nearest_traj_idx = get_nearest_embed_cosine(traj_embed, lang_embed, traj_embeds)
+            nearest_traj_idx = get_nearest_embed(traj_embed, lang_embed, traj_embeds, metric="cosine")
             nearest_traj = trajs[nearest_traj_idx]
             traj1_feature_values = [value_func(traj[t]) for t in range(500)]
             traj2_feature_values = [value_func(nearest_traj[t]) for t in range(500)]
@@ -199,14 +182,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
     parser.add_argument('--data-dir', type=str, default='data')
-    parser.add_argument('--use-bert-encoder', action='store_true')
-    parser.add_argument('--bert-model', type=str, default='bert-base-uncased')
+    parser.add_argument('--use-lang-encoder', action='store_true')
+    parser.add_argument('--lang-model-name', type=str, default='t5-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
-    parser.add_argument('--preprocessed-nlcomps', action='store_true')
     parser.add_argument('--old-model', action='store_true')
     parser.add_argument('--traj_encoder', type=str, default='mlp')
     args = parser.parse_args()
-    main(args.model_dir, args.data_dir, args.use_bert_encoder, args.bert_model,
+    main(args.model_dir, args.data_dir, args.lang_model_name,
          args.encoder_hidden_dim, args.decoder_hidden_dim,
-         args.preprocessed_nlcomps, args.old_model, traj_encoder=args.traj_encoder)
+         args.old_model, traj_encoder=args.traj_encoder)

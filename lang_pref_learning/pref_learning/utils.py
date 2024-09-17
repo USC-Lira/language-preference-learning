@@ -3,6 +3,8 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 
+import torch
+
 rs_feature_aspects = ['gt_reward', 'speed', 'height', 'distance_to_bottle', 'distance_to_cube']
 
 mw_feature_aspects = ['height', 'velocity', 'distance']
@@ -50,6 +52,49 @@ def load_data(args, split='train', DEBUG=False):
     }
 
     return data
+
+
+def get_lang_feedback_aspect(curr_feature, reward, optimal_traj_feature, noisy=False, temperature=1.0):
+    """
+    Get language feedback based on feature value and true reward function
+
+    Args:
+        curr_feature: the feature value of the current trajectory
+        reward: the true reward function
+        optimal_traj_feature: the feature value of the optimal trajectory
+        noisy: whether to add noise to the feedback
+        temperature: the temperature for the softmax
+
+    Returns:
+        feature_idx: the index of the feature to give feedback on
+        pos: whether the feedback is positive or negative
+    """
+    # potential_pos = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
+    # potential_neg = torch.tensor(reward * (curr_feature.numpy() - optimal_traj_feature))
+    # potential = torch.cat([potential_pos, potential_neg], dim=1)
+    potential = torch.tensor(reward * (optimal_traj_feature - curr_feature.numpy()))
+    potential = potential / temperature
+    probs = torch.softmax(potential, dim=1)
+    if noisy:
+        # sample a language comparison with the probabilities
+        feature_idx = torch.multinomial(probs, 1).item()
+    else:
+        feature_idx = torch.argmax(probs).item()
+    if optimal_traj_feature[feature_idx] - curr_feature[0, feature_idx] > 0:
+        pos = True
+    else:
+        pos = False
+
+    return feature_idx, pos
+
+
+def get_optimal_traj(learned_reward, traj_embeds, traj_true_rewards):
+    # Fine the optimal trajectory with learned reward
+    learned_rewards = torch.tensor([learned_reward(torch.from_numpy(traj_embed)) for traj_embed in traj_embeds])
+    optimal_learned_reward = traj_true_rewards[torch.argmax(learned_rewards)]
+    optimal_true_reward = traj_true_rewards[torch.argmax(torch.tensor(traj_true_rewards))]
+
+    return optimal_learned_reward, optimal_true_reward
 
 
 def save_results(args, results, postfix="noisy"):

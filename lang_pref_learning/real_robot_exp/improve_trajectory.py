@@ -233,7 +233,7 @@ if __name__ == '__main__':
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
     parser.add_argument('--data-dir', type=str, default='data')
     parser.add_argument('--use-lang-encoder', action='store_true')
-    parser.add_argument('--lang-model', type=str, default='bert-base')
+    parser.add_argument('--lang-model-name', type=str, default='bert-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
     parser.add_argument('--old-model', action='store_true')
