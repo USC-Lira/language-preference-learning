@@ -69,11 +69,9 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 
 ax.legend(frameon=False)
-legend = plt.legend(loc='upper left', fontsize=19)
+plt.legend(loc='upper left', fontsize=19)
 ax.get_legend().legend_handles[0].set_color(lang_color)
 ax.get_legend().legend_handles[1].set_color(pairwise_color)
-legend.get_frame().set_facecolor('none')
-legend.get_frame().set_edgecolor('none')
 
 plt.xlabel('Iteration', fontsize=20)
 plt.ylabel('Average Rating\n[1 Very Bad ~ 5 Very Good]', fontsize=19)
