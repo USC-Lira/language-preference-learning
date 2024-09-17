@@ -58,6 +58,19 @@ WidowX_ACTION_DIM = 7
 WidowX_OBJECT_STATE_DIM = 0
 WidowX_PROPRIO_STATE_DIM = 22
 
+# Franka Kitchen Observation Dimensions
+Kitchen_STATE_OBS_DIM = 59
+Kitchen_ACTION_DIM = 9
+Kitchen_OBJECT_STATE_DIM = 0
+Kitchen_PROPRIO_STATE_DIM = 59
+
+
+env_dims = {
+    "robosuite": (RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM),
+    "widowx": (WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM),
+    "metaworld": (MW_STATE_OBS_DIM, MW_ACTION_DIM, MW_PROPRIO_STATE_DIM, MW_OBJECT_STATE_DIM)
+}
+
 
 def calc_and_set_global_vars(trajs):
     horizon = len(trajs[0])

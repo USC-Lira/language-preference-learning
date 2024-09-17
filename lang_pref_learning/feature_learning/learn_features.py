@@ -14,15 +14,13 @@ from lang_pref_learning.feature_learning.nl_traj_dataset import NLTrajComparison
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.feature_learning.utils import (
     timeStamped,
-    LANG_MODEL_NAME,
+    HF_LANG_MODEL_NAME,
     LANG_OUTPUT_DIM,
     create_logger,
     AverageMeter,
 )
 
-from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
-from data.utils import MW_STATE_OBS_DIM, MW_ACTION_DIM, MW_PROPRIO_STATE_DIM, MW_OBJECT_STATE_DIM
-from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
+from data.utils import env_dims
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["OMP_NUM_THREADS"] = "4"
@@ -33,13 +31,7 @@ def load_data(args, split="train"):
     # nlcomp_index_file is a .npy file with the indexes of the nlcomps in the dataset.
     nlcomp_index_file = os.path.join(args.data_dir, "{}/nlcomp_indexes.npy".format(split))
 
-    # If we don't use bert in the language encoder, then we need to load the preprocessed nlcomps.
-    if not args.use_bert_encoder:
-        unique_nlcomp_file = os.path.join(
-            args.data_dir, "{}/unique_nlcomps_{}.npy".format(split, args.lang_model)
-        )
-    else:
-        unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps.json".format(split))
+    unique_nlcomp_file = os.path.join(args.data_dir, "{}/unique_nlcomps.json".format(split))
 
     # traj_a_index_file is a .npy file with the indexes of the first trajectory in the dataset.
     # traj_b_index_file is a .npy file with the indexes of the second trajectory in the dataset.
@@ -64,9 +56,7 @@ def load_data(args, split="train"):
                     f"{split}/traj_img_features_{args.feature_extractor}_stack_{args.n_frames}.npy",
                 )
             else:
-                traj_img_obs_file = os.path.join(
-                    args.data_dir, f"{split}/traj_img_obs_stack_{args.n_frames}.npy"
-                )
+                traj_img_obs_file = os.path.join(args.data_dir, f"{split}/traj_img_obs_stack_{args.n_frames}.npy")
         else:
             if args.use_visual_features:
                 traj_img_obs_file = os.path.join(
@@ -90,13 +80,9 @@ def evaluate(model, data_loader, device):
     total_log_likelihood = 0
     total_num_correct = 0
     logsigmoid = nn.LogSigmoid()
-    curr_t = time.time()
     for data in tqdm(data_loader):
         with torch.no_grad():
-            curr_t = time.time()
             data = {key: value.to(device) for key, value in data.items()}
-
-            curr_t = time.time()
 
             pred = model(data, train=False)
             (
@@ -110,9 +96,7 @@ def evaluate(model, data_loader, device):
             reconstruction_loss = torch.tensor(0.0).to(device)
             if decoded_traj_a is not None and decoded_traj_b is not None:
                 reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(data["traj_a"], dim=-2))
-                reconstruction_loss += F.mse_loss(
-                    decoded_traj_b, torch.mean(data["traj_b"], dim=-2)
-                )
+                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(data["traj_b"], dim=-2))
                 total_reconstruction_loss += reconstruction_loss.detach().cpu().item()
 
             norm_loss = F.mse_loss(
@@ -180,12 +164,8 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
             # MSELoss already takes the mean over the batch.
             reconstruction_loss = torch.tensor(0.0).to(device)
             if decoded_traj_a is not None and decoded_traj_b is not None:
-                reconstruction_loss = F.mse_loss(
-                    decoded_traj_a, torch.mean(train_data["traj_a"], dim=-2)
-                )
-                reconstruction_loss += F.mse_loss(
-                    decoded_traj_b, torch.mean(train_data["traj_b"], dim=-2)
-                )
+                reconstruction_loss = F.mse_loss(decoded_traj_a, torch.mean(train_data["traj_a"], dim=-2))
+                reconstruction_loss += F.mse_loss(decoded_traj_b, torch.mean(train_data["traj_b"], dim=-2))
 
             # F.cosine_similarity only reduces along the feature dimension, so we take the mean over the batch later.
             cos_sim = F.cosine_similarity(encoded_traj_b - encoded_traj_a, encoded_lang)
@@ -204,18 +184,12 @@ def train_one_epoch(args, model, data_loader, optimizer, device, epoch, use_lr_s
 
             # Add L2 loss to the trajectory embeddings
             traj_reg_loss = 0.0
-            traj_reg_loss += (
-                (torch.norm(encoded_traj_a, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
-            )
-            traj_reg_loss += (
-                (torch.norm(encoded_traj_b, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
-            )
+            traj_reg_loss += (torch.norm(encoded_traj_a, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
+            traj_reg_loss += (torch.norm(encoded_traj_b, dim=-1) - args.traj_reg_margin).clamp(min=0.0).mean()
 
             # By now, train_loss is a scalar.
             # train_loss = reconstruction_loss + distance_loss
-            train_loss = (
-                reconstruction_loss + log_likelihood_loss + args.traj_reg_coeff * traj_reg_loss
-            )
+            train_loss = reconstruction_loss + log_likelihood_loss + args.traj_reg_coeff * traj_reg_loss
 
             if args.add_norm_loss:
                 train_loss += norm_loss
@@ -273,68 +247,45 @@ def train(logger, args):
 
     # Load model to the specified device, either gpu or cpu
     logger.info("Initializing model and loading to device...")
-    if args.use_bert_encoder:
-        if "t5" in args.lang_model:
-            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
-        else:
-            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-
-        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
+    if "t5" in args.lang_model_name:
+        lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
     else:
-        lang_encoder = None
-        tokenizer = None
-        feature_dim = 128
+        lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
 
-    if args.env == "robosuite":
-        STATE_OBS_DIM = RS_STATE_OBS_DIM
-        ACTION_DIM = RS_ACTION_DIM
-        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
-    elif args.env == "widowx":
-        STATE_OBS_DIM = WidowX_STATE_OBS_DIM
-        ACTION_DIM = WidowX_ACTION_DIM
-        PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
-    elif args.env == "metaworld":
-        STATE_OBS_DIM = MW_STATE_OBS_DIM
-        ACTION_DIM = MW_ACTION_DIM
-        PROPRIO_STATE_DIM = MW_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = MW_OBJECT_STATE_DIM
-    else:
-        raise ValueError("Invalid environment")
+    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+    feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
+
+    STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM = env_dims.get(args.env, None)
 
     model = NLTrajAutoencoder(
-        STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
+        STATE_OBS_DIM,
+        ACTION_DIM,
+        PROPRIO_STATE_DIM,
+        OBJECT_STATE_DIM,
         encoder_hidden_dim=args.encoder_hidden_dim,
         feature_dim=feature_dim,
         decoder_hidden_dim=args.decoder_hidden_dim,
         lang_encoder=lang_encoder,
-        preprocessed_nlcomps=args.preprocessed_nlcomps,
-        lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
-        use_bert_encoder=args.use_bert_encoder,
+        lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model_name],
         traj_encoder=args.traj_encoder,
         use_stack_img_obs=args.use_stack_img_obs,
         n_frames=args.n_frames,
         use_visual_features=args.use_visual_features,
         visual_feature_dim=(
-            args.visual_feature_dim * args.n_frames
-            if args.use_stack_img_obs
-            else args.visual_feature_dim
+            args.visual_feature_dim * args.n_frames if args.use_stack_img_obs else args.visual_feature_dim
         ),
         seq_len=int(args.seq_len * args.resample_factor),
     )
 
-    if args.use_bert_encoder:
-        if not args.finetune_bert:
-            # Freeze BERT in the first training stage
-            for param in model.lang_encoder.parameters():
-                param.requires_grad = False
-        else:
-            # Load the model.
-            model_path = os.path.join(exp_dir, "best_model_state_dict.pth")
-            logger.info(f"Loaded model from: {model_path}")
-            model.load_state_dict(torch.load(model_path))
+    if not args.finetune_lang_model_name:
+        # Freeze BERT in the first training stage
+        for param in model.lang_encoder.parameters():
+            param.requires_grad = False
+    else:
+        # Load the model.
+        model_path = os.path.join(exp_dir, "best_model_state_dict.pth")
+        logger.info(f"Loaded model from: {model_path}")
+        model.load_state_dict(torch.load(model_path))
 
     for name, param in model.named_parameters():
         logger.debug(f"{name}: {param.requires_grad}")
@@ -367,7 +318,6 @@ def train(logger, args):
         train_files_dict["traj_b_index"],
         seq_len=args.seq_len,
         tokenizer=tokenizer,
-        preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=train_files_dict["unique_nlcomp"],
         traj_file=train_files_dict["trajs"],
         use_img_obs=args.use_img_obs,
@@ -385,7 +335,6 @@ def train(logger, args):
         val_files_dict["traj_b_index"],
         seq_len=args.seq_len,
         tokenizer=tokenizer,
-        preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=val_files_dict["unique_nlcomp"],
         traj_file=val_files_dict["trajs"],
         use_img_obs=args.use_img_obs,
@@ -403,7 +352,6 @@ def train(logger, args):
         test_files_dict["traj_b_index"],
         seq_len=args.seq_len,
         tokenizer=tokenizer,
-        preprocessed_nlcomps=args.preprocessed_nlcomps,
         unique_nlcomp_file=test_files_dict["unique_nlcomp"],
         traj_file=test_files_dict["trajs"],
         use_img_obs=args.use_img_obs,
@@ -441,11 +389,7 @@ def train(logger, args):
         logger.info("Initial loss sanity check...")
 
         val_metrics = evaluate(model, val_loader, device)
-        logger.info(
-            "initial val loss: {:.4f}, accuracy: {:.4f}".format(
-                val_metrics["loss"], val_metrics["accuracy"]
-            )
-        )
+        logger.info("initial val loss: {:.4f}, accuracy: {:.4f}".format(val_metrics["loss"], val_metrics["accuracy"]))
 
     logger.info("Beginning training...")
     train_losses = []
@@ -564,16 +508,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
 
     parser.add_argument(
-        "--exp-name",
-        type=str,
-        default="feature_learning",
+        "--exp-name", type=str, default="feature_learning",
         help="the name of experiment",
     )
     parser.add_argument(
         "--env",
         type=str,
         default="robosuite",
-        choices=["robosuite", "widowx", "metaworld"],
+        choices=["robosuite", "widowx", "metaworld", "franka-kitchen"],
         help="which environment to use",
     )
     parser.add_argument("--seed", type=int, default=0, help="")
@@ -586,35 +528,20 @@ if __name__ == "__main__":
     parser.add_argument("--use_lr_scheduler", action="store_true", help="use lr scheduler")
     parser.add_argument("--encoder-hidden-dim", type=int, default=128, help="")
     parser.add_argument("--decoder-hidden-dim", type=int, default=128, help="")
-    parser.add_argument("--preprocessed-nlcomps", action="store_true", help="")
-    parser.add_argument(
-        "--initial-loss-check",
-        action="store_true",
-        help="whether to check initial loss",
-    )
-    parser.add_argument("--finetune-bert", action="store_true", help="whether to finetune BERT")
-    parser.add_argument(
-        "--save-dir",
-        type=str,
-        default="feature_learning/",
-        help="where to save the model",
-    )
+    parser.add_argument("--initial-loss-check", action="store_true",help="whether to check initial loss")
+    parser.add_argument("--finetune-lang-model", action="store_true", help="whether to finetune BERT")
+    parser.add_argument("--save-dir", type=str, default="feature_learning/", help="where to save the model")
     parser.add_argument(
         "--lang-model",
         type=str,
-        default="bert-base",
-        choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],
+        default="t5-base",
+        choices=["t5-small", "t5-base", "bert-base", "bert-mini", "bert-tiny", ],
         help="which language model to use",
-    )
-    parser.add_argument(
-        "--use-bert-encoder",
-        action="store_true",
-        help="whether to use BERT in the language encoder",
     )
     parser.add_argument(
         "--traj-encoder",
         default="mlp",
-        choices=["mlp", "lstm", "cnn", "visual-transformer"],
+        choices=["mlp", "cnn"],
         help="which trajectory encoder to use",
     )
     parser.add_argument(
@@ -623,52 +550,32 @@ if __name__ == "__main__":
         help="whether to add norm loss to the total loss",
     )
 
-    parser.add_argument(
-        "--seq-len", type=int, default=500, help="sequence length for the trajectory"
-    )
-    parser.add_argument(
-        "--use-img-obs", action="store_true", help="whether to use image observations"
-    )
-    parser.add_argument(
-        "--use-stack-img-obs",
-        action="store_true",
-        help="whether to use stacked image observations",
-    )
+    parser.add_argument("--seq-len", type=int, default=500, help="sequence length for the trajectory")
+    parser.add_argument("--use-img-obs", action="store_true", help="whether to use image observations")
+    parser.add_argument("--use-stack-img-obs", action="store_true", help="whether to use stacked image observations",)
     parser.add_argument("--n-frames", type=int, default=3, help="number of frames to stack")
-    parser.add_argument(
-        "--use-visual-features",
-        action="store_true",
-        help="whether to use visual features",
-    )
+    parser.add_argument("--use-visual-features", action="store_true", help="whether to use visual features",)
     parser.add_argument(
         "--feature-extractor",
         type=str,
         default="resnet18",
         choices=["resnet18", "efficientnetb3", "s3d"],
-        help="feature extractor",
+        help="feature extractor for image observations",
     )
     parser.add_argument(
-        "--visual-feature-dim",
-        type=int,
-        default=256,
+        "--visual-feature-dim", type=int, default=256,
         help="dimension of visual features",
     )
     parser.add_argument(
-        "--resample",
-        action="store_true",
-        help="whether to resample the image observations",
+        "--resample", action="store_true", help="whether to resample the image observations",
     )
-    parser.add_argument("--resample-factor", type=float, default=1.0, help="resample factor")
+    parser.add_argument("--resample-factor", type=float, default=1.0, help="resample ratio for the image observations")
     parser.add_argument(
-        "--traj-reg-coeff",
-        type=float,
-        default=1e-3,
+        "--traj-reg-coeff", type=float, default=1e-3, 
         help="coefficient for the trajectory regularization loss",
     )
     parser.add_argument(
-        "--traj-reg-margin",
-        type=float,
-        default=1.0,
+        "--traj-reg-margin", type=float, default=1.0, 
         help="margin for the trajectory regularization loss",
     )
 
@@ -683,18 +590,14 @@ if __name__ == "__main__":
     logger = create_logger(exp_dir)
     args.save_dir = exp_dir
 
-    if not args.use_bert_encoder:
-        # Linear model: one-stage training
-        trained_model = train(logger, args)
 
-    else:
-        # BERT as the language encoder: two-stage training
-        # Stage 1: train the trajectory encoder with BERT frozen
-        logger.info("\n------------------ Freeze Language Model ------------------")
-        train(logger, args)
+    # Two-stage training
+    ## stage 1: train the trajectory encoder with BERT frozen
+    logger.info("\n------------------ Freeze Language Model ------------------")
+    train(logger, args)
 
-        # Stage 2: co-finetune BERT and the trajectory encoder
-        logger.info("\n------------------ Co-finetune Language Model ------------------")
-        args.finetune_bert = True
-        args.lr = args.finetune_lr
-        train(logger, args)
+    ## stage 2: co-finetune BERT and the trajectory encoder
+    logger.info("\n------------------ Co-finetune Language Model ------------------")
+    args.finetune_lang_model_name = True
+    args.lr = args.finetune_lr
+    train(logger, args)

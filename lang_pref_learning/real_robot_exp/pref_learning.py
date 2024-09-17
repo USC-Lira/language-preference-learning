@@ -20,7 +20,7 @@ from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.pref_learning.pref_dataset import LangPrefDataset, CompPrefDataset, EvalDataset
 from lang_pref_learning.pref_learning.utils import feature_aspects
-from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
+from lang_pref_learning.feature_learning.utils import HF_LANG_MODEL_NAME, LANG_OUTPUT_DIM, AverageMeter
 from lang_pref_learning.real_robot_exp.utils import get_traj_embeds_wx, get_lang_embed
 from lang_pref_learning.real_robot_exp.improve_trajectory import get_feature_value
 from lang_pref_learning.real_robot_exp.utils import replay_traj_widowx, replay_trajectory_video, remove_special_characters
@@ -290,7 +290,7 @@ def lang_pref_learning(
 
         nlcomp = input("Please provide the language feedback: ")
         nlcomp = remove_special_characters(nlcomp)
-        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model_name=lang_encoder)
 
         all_lang_feedback.append(nlcomp)
         all_lang_embeds.append(lang_embed)
@@ -433,18 +433,13 @@ def run(args):
 
     # Current learned language encoder
     # Load the model
-    if args.use_bert_encoder:
-        if 't5' in args.lang_model:
-            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
-        else:
-            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-
-        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
+    if 't5' in args.lang_model_name:
+        lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
     else:
-        lang_encoder = None
-        tokenizer = None
-        feature_dim = 128
+        lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+
+    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+    feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
 
     if args.env == "widowx":
         STATE_OBS_DIM = WidowX_STATE_OBS_DIM
@@ -460,9 +455,7 @@ def run(args):
         feature_dim=feature_dim,
         decoder_hidden_dim=args.decoder_hidden_dim,
         lang_encoder=lang_encoder,
-        preprocessed_nlcomps=args.preprocessed_nlcomps,
-        lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
-        use_bert_encoder=args.use_bert_encoder,
+        lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model_name],
         traj_encoder=args.traj_encoder,
     )
 
@@ -556,7 +549,6 @@ if __name__ == "__main__":
 
     parser.add_argument("--encoder-hidden-dim", type=int, default=128)
     parser.add_argument("--decoder-hidden-dim", type=int, default=128)
-    parser.add_argument("--preprocessed-nlcomps", action="store_true", help="")
     parser.add_argument(
         "--lang-model", type=str, default="t5-small", 
         choices=["bert-base", "bert-mini", "bert-tiny", "t5-small", "t5-base"],

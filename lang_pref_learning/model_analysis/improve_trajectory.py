@@ -6,15 +6,13 @@ import torch
 import os
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
-from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
+from lang_pref_learning.feature_learning.utils import HF_LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.model_analysis.utils import get_traj_lang_embeds, get_lang_embed
 
 from data.utils import gt_reward, speed, height, distance_to_cube, distance_to_bottle
-from data.utils import RS_STATE_OBS_DIM, RS_ACTION_DIM, RS_PROPRIO_STATE_DIM, RS_OBJECT_STATE_DIM
-from data.utils import WidowX_STATE_OBS_DIM, WidowX_ACTION_DIM, WidowX_PROPRIO_STATE_DIM, WidowX_OBJECT_STATE_DIM
-from data.utils import MW_STATE_OBS_DIM, MW_ACTION_DIM, MW_PROPRIO_STATE_DIM, MW_OBJECT_STATE_DIM
+from data.utils import env_dims
 
 
 def initialize_reward(num_features):
@@ -111,7 +109,7 @@ def improve_trajectory(reward_func, feature_values, less_idx, greater_nlcomps, l
                                         less_idx, greater_nlcomps, less_nlcomps, all_nlcomps, softmax=use_softmax)
         lang_embed = lang_embeds[idx]
         # lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, use_bert_encoder=args.use_bert_encoder,
-        #                             lang_model=lang_encoder)
+        #                             lang_model_name=lang_encoder)
         next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         # next_traj_idx = get_nearest_embed_project(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_value = reward_values[next_traj_idx]
@@ -159,46 +157,20 @@ def main(args):
     less_nlcomps = json.load(open(os.path.join(args.data_dir, 'all_less_nlcomps.json'), 'rb'))
 
     # Load the model
-    if args.use_bert_encoder:
-        if 't5' in args.lang_model:
-            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
-        else:
-            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-
-        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
+    if 't5' in args.lang_model_name:
+        lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
     else:
-        lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model])
-        feature_dim = 128
+        lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
 
-    if args.env == "robosuite":
-        STATE_OBS_DIM = RS_STATE_OBS_DIM
-        ACTION_DIM = RS_ACTION_DIM
-        PROPRIO_STATE_DIM = RS_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = RS_OBJECT_STATE_DIM
+    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+    feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
 
-    elif args.env == "widowx":
-        STATE_OBS_DIM = WidowX_STATE_OBS_DIM
-        ACTION_DIM = WidowX_ACTION_DIM
-        PROPRIO_STATE_DIM = WidowX_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = WidowX_OBJECT_STATE_DIM
-
-    elif args.env == "metaworld":
-        STATE_OBS_DIM = MW_STATE_OBS_DIM
-        ACTION_DIM = MW_ACTION_DIM
-        PROPRIO_STATE_DIM = MW_PROPRIO_STATE_DIM
-        OBJECT_STATE_DIM = MW_OBJECT_STATE_DIM
-
-    else:
-        raise ValueError("Invalid environment")
+    STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM = env_dims.get(args.env, None)
 
     model = NLTrajAutoencoder(STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
                               encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
-                              preprocessed_nlcomps=args.preprocessed_nlcomps,
-                              lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
-                              use_bert_encoder=args.use_bert_encoder, 
+                              lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model_name],
                               traj_encoder=args.traj_encoder
                               )
 
@@ -219,15 +191,15 @@ def main(args):
     model.eval()
 
     # Get embeddings for the trajectories and language comparisons
-    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, args.use_bert_encoder, tokenizer,
+    traj_embeds, lang_embeds = get_traj_lang_embeds(trajs, nlcomps, model, device, tokenizer,
                                                     use_img_obs=args.use_image_obs,
                                                     img_obs=traj_img_obs,
                                                     actions=actions,
                                                     )
 
-    # Get BERT embeddings for the language comparisons in greater_nlcomps and less_nlcomps
-    greater_nlcomps_bert_embeds = {}
-    less_nlcomps_bert_embeds = {}
+    # Get the embeddings for the language comparisons in greater_nlcomps and less_nlcomps
+    # greater_nlcomps_bert_embeds = {}
+    # less_nlcomps_bert_embeds = {}
     # for feature_name in greater_nlcomps:
     #     greater_nlcomps_bert_embeds[feature_name] = []
     #     for nlcomp in greater_nlcomps[feature_name]:
@@ -274,24 +246,14 @@ def main(args):
     less_idx = [2]
     for i in less_idx:
         feature_values[:, i] = 1 - feature_values[:, i]
-
-    # optimal_reached, optimal_traj_value_argmax, traj_values_argmax = improve_trajectory(reward_func, feature_values,
-    #                                                                                     less_idx,
-    #                                                                                     greater_nlcomps, less_nlcomps,
-    #                                                                                     nlcomps, traj_embeds,
-    #                                                                                     lang_embeds, model, device,
-    #                                                                                     tokenizer,
-    #                                                                                     lang_encoder, args,
-    #                                                                                     use_softmax=False)
     
-    optimal_reached, optimal_traj_value_softmax, traj_values_softmax = improve_trajectory(reward_func, feature_values,
-                                                                                          less_idx,
-                                                                                          greater_nlcomps, less_nlcomps,
-                                                                                          nlcomps, traj_embeds,
-                                                                                          lang_embeds, model, device,
-                                                                                          tokenizer,
-                                                                                          lang_encoder, args,
-                                                                                          use_softmax=True)
+    optimal_reached, optimal_traj_value_softmax, traj_values_softmax = \
+        improve_trajectory(
+            reward_func, feature_values, less_idx,
+            greater_nlcomps, less_nlcomps, nlcomps, 
+            traj_embeds, lang_embeds, model, device,
+            tokenizer, lang_encoder, args, use_softmax=True
+        )
 
     return optimal_traj_value_softmax, traj_values_softmax
 
@@ -302,11 +264,9 @@ if __name__ == '__main__':
     parser.add_argument("--env", type=str, default='robosuite', choices=['robosuite', 'widowx', 'metaworld'])
     parser.add_argument('--model-dir', type=str, default='exp/linear_bert-mini')
     parser.add_argument('--data-dir', type=str, default='data')
-    parser.add_argument('--use-bert-encoder', action='store_true')
     parser.add_argument('--lang-model', type=str, default='bert-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
-    parser.add_argument('--preprocessed-nlcomps', action='store_true')
     parser.add_argument('--old-model', action='store_true')
     parser.add_argument('--iterations', type=int, default=10)
     parser.add_argument('--debug', action='store_true')

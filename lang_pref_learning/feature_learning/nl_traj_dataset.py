@@ -17,7 +17,6 @@ class NLTrajComparisonDataset(Dataset):
         traj_b_file,
         seq_len=64,
         tokenizer=None,
-        preprocessed_nlcomps=False,
         unique_nlcomp_file=None,
         traj_file=None,
         use_img_obs=False,
@@ -39,13 +38,17 @@ class NLTrajComparisonDataset(Dataset):
         self.traj_bs = np.load(traj_b_file)
         if use_img_obs:
             self.img_observations = np.load(img_obs_file)
-            # self.actions = np.load(action_file)
+            if action_file is not None:
+                self.actions = np.load(action_file)
+            else:
+                self.actions = None
 
             if resample:
                 resample_frames = int(1 / resample_factor)
                 self.trajs = self.trajs[:, ::resample_frames]
                 self.img_observations = self.img_observations[:, ::resample_frames]
-                # self.actions = self.actions[:, ::resample_frames]
+                if self.actions:
+                    self.actions = self.actions[:, ::resample_frames]
 
                 # assert self.img_observations.shape[1] == int(
                 #     seq_len * resample_factor
@@ -56,7 +59,6 @@ class NLTrajComparisonDataset(Dataset):
                 self.img_observations = rearrange(self.img_observations, "b t h w c -> b t c h w")
 
         self.max_len = seq_len
-        self.preprocessed_nlcomps = preprocessed_nlcomps
         self.use_img_obs = use_img_obs
 
         self.unique_nlcomps = None
@@ -64,31 +66,28 @@ class NLTrajComparisonDataset(Dataset):
         self.unique_nlcomps_attention_masks = None
 
         # These are the sentences and trajectories corresponding to the indexes.
-        if preprocessed_nlcomps:
-            self.unique_nlcomps = np.load(unique_nlcomp_file)
-        else:
-            assert (
-                tokenizer is not None
-            ), "Must provide tokenizer if not using preprocessed_nlcomps."
-            self.tokenizer = tokenizer
-            with open(unique_nlcomp_file, "rb") as f:
-                unique_nlcomps = json.load(f)
-            self.unique_nlcomps_tokens = []
-            self.unique_nlcomps_attention_masks = []
+        assert (
+            tokenizer is not None
+        ), "Must provide tokenizer."
+        self.tokenizer = tokenizer
+        with open(unique_nlcomp_file, "rb") as f:
+            unique_nlcomps = json.load(f)
+        self.unique_nlcomps_tokens = []
+        self.unique_nlcomps_attention_masks = []
 
-            self.unique_nlcomps_tokens = np.array(self.unique_nlcomps_tokens)
-            self.unique_nlcomps_attention_masks = np.array(self.unique_nlcomps_attention_masks)
+        self.unique_nlcomps_tokens = np.array(self.unique_nlcomps_tokens)
+        self.unique_nlcomps_attention_masks = np.array(self.unique_nlcomps_attention_masks)
 
-            tokenized_nlcomps = self.tokenizer(
-                unique_nlcomps,
-                padding=True,
-                add_special_tokens=True,
-                return_tensors="pt",
-            )
-            tokens = tokenized_nlcomps["input_ids"]
-            attention_masks = tokenized_nlcomps["attention_mask"]
-            self.unique_nlcomps_tokens = tokens
-            self.unique_nlcomps_attention_masks = attention_masks
+        tokenized_nlcomps = self.tokenizer(
+            unique_nlcomps,
+            padding=True,
+            add_special_tokens=True,
+            return_tensors="pt",
+        )
+        tokens = tokenized_nlcomps["input_ids"]
+        attention_masks = tokenized_nlcomps["attention_mask"]
+        self.unique_nlcomps_tokens = tokens
+        self.unique_nlcomps_attention_masks = attention_masks
 
         # move to device
         self.trajs = torch.tensor(self.trajs, dtype=torch.float32).to(device)
@@ -116,10 +115,7 @@ class NLTrajComparisonDataset(Dataset):
             data["img_obs_a"] = self.img_observations[self.traj_as[idx]]
             data["img_obs_b"] = self.img_observations[self.traj_bs[idx]]
 
-        if self.preprocessed_nlcomps:
-            data["nlcomp"] = torch.tensor(self.unique_nlcomps[self.nlcomps[idx]])
-        else:
-            data["nlcomp_tokens"] = self.unique_nlcomps_tokens[self.nlcomps[idx]]
-            data["attention_mask"] = self.unique_nlcomps_attention_masks[self.nlcomps[idx]]
+        data["nlcomp_tokens"] = self.unique_nlcomps_tokens[self.nlcomps[idx]]
+        data["attention_mask"] = self.unique_nlcomps_attention_masks[self.nlcomps[idx]]
 
         return data

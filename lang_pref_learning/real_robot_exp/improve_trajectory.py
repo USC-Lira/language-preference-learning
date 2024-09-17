@@ -12,7 +12,7 @@ import pickle
 import os
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
-from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME, LANG_OUTPUT_DIM
+from lang_pref_learning.feature_learning.utils import HF_LANG_MODEL_NAME, LANG_OUTPUT_DIM
 from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.real_robot_exp.utils import get_lang_embed, get_traj_embeds_wx
@@ -109,7 +109,7 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
         nlcomp = remove_special_characters(nlcomp)
         print(nlcomp)
 
-        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model=lang_encoder)
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model_name=lang_encoder)
         # next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         next_traj_idx = get_nearest_embed_distance(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         curr_traj_idx = next_traj_idx
@@ -171,16 +171,16 @@ def main(args):
 
     # Load the model
     if args.use_lang_encoder:
-        if 't5' in args.lang_model:
-            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model)
+        if 't5' in args.lang_model_name:
+            lang_encoder = T5EncoderModel.from_pretrained(args.lang_model_name)
         else:
-            lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
+            lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
 
-        tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        feature_dim = LANG_OUTPUT_DIM[args.lang_model]
+        tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+        feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
     else:
-        lang_encoder = AutoModel.from_pretrained(LANG_MODEL_NAME[args.lang_model])
-        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model])
+        lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
+        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model_name])
         feature_dim = 128
 
     if args.env == "widowx":
@@ -194,22 +194,10 @@ def main(args):
     model = NLTrajAutoencoder(STATE_OBS_DIM, ACTION_DIM, PROPRIO_STATE_DIM, OBJECT_STATE_DIM,
                               encoder_hidden_dim=args.encoder_hidden_dim, feature_dim=feature_dim,
                               decoder_hidden_dim=args.decoder_hidden_dim, lang_encoder=lang_encoder,
-                              preprocessed_nlcomps=args.preprocessed_nlcomps,
-                              lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model],
-                              use_bert_encoder=args.use_lang_encoder, 
-                              traj_encoder=args.traj_encoder
-                              )
+                              lang_embed_dim=LANG_OUTPUT_DIM[args.lang_model_name],
+                              traj_encoder=args.traj_encoder)
 
     state_dict = torch.load(os.path.join(args.model_dir, 'best_model_state_dict.pth'))
-
-    # Compatibility with old model
-    if args.old_model:
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            new_k = k.replace('_hidden_layer', '.0')
-            new_k = new_k.replace('_output_layer', '.2')
-            new_state_dict[new_k] = v
-        state_dict = new_state_dict
 
     model.load_state_dict(state_dict)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -248,7 +236,6 @@ if __name__ == '__main__':
     parser.add_argument('--lang-model', type=str, default='bert-base')
     parser.add_argument('--encoder-hidden-dim', type=int, default=128)
     parser.add_argument('--decoder-hidden-dim', type=int, default=128)
-    parser.add_argument('--preprocessed-nlcomps', action='store_true')
     parser.add_argument('--old-model', action='store_true')
     parser.add_argument('--iterations', type=int, default=10)
     parser.add_argument('--debug', action='store_true')

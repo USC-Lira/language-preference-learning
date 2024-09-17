@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from lang_pref_learning.model.lstm import LSTMEncoder
 from lang_pref_learning.model.cnn import CNNEncoder
 from lang_pref_learning.model.visual_mlp import VisualMLP
 
@@ -19,8 +18,6 @@ class NLTrajAutoencoder(nn.Module):
         decoder_hidden_dim=128,
         lang_embed_dim=768,
         lang_encoder=None,
-        preprocessed_nlcomps=False,
-        use_lang_encoder=False,
         traj_encoder="mlp",
         use_stack_img_obs=False,
         n_frames=3,
@@ -69,18 +66,8 @@ class NLTrajAutoencoder(nn.Module):
             nn.Linear(in_features=decoder_hidden_dim, out_features=STATE_OBS_DIM + ACTION_DIM),
         )
 
-        self.preprocessed_nlcomps = preprocessed_nlcomps
-        # Note: the first language encoder layer is BERT.
-        self.use_bert_encoder = use_lang_encoder
-        if use_lang_encoder:
-            assert lang_encoder is not None
-            self.lang_encoder = lang_encoder
-        else:
-            self.lang_encoder = nn.Sequential(
-                nn.Linear(in_features=lang_embed_dim, out_features=encoder_hidden_dim),
-                nn.ReLU(),
-                nn.Linear(in_features=encoder_hidden_dim, out_features=feature_dim),
-            )
+        assert lang_encoder is not None
+        self.lang_encoder = lang_encoder
 
         # state_dim = proprio_state_dim + object_state_dim
         self.state_dim = STATE_OBS_DIM
@@ -124,22 +111,18 @@ class NLTrajAutoencoder(nn.Module):
             raise ValueError(f"Trajectory encoder {self.traj_encoder} not found")
 
         # Encode the language
-        if self.use_bert_encoder:
-            lang_tokens = inputs["nlcomp_tokens"]
-            lang_attention_mask = inputs["attention_mask"]
-            bert_outputs = self.lang_encoder(lang_tokens, attention_mask=lang_attention_mask)
-            bert_embeddings = bert_outputs.last_hidden_state
-            encoded_lang = torch.mean(bert_embeddings, dim=1, keepdim=False)
-        else:
-            lang_embeds = inputs["nlcomp"]
-            encoded_lang = self.lang_encoder(lang_embeds)
+        lang_tokens = inputs["nlcomp_tokens"]
+        lang_attention_mask = inputs["attention_mask"]
+        bert_outputs = self.lang_encoder(lang_tokens, attention_mask=lang_attention_mask)
+        bert_embeddings = bert_outputs.last_hidden_state
+        encoded_lang = torch.mean(bert_embeddings, dim=1, keepdim=False)
 
         # NOTE: traj_a is the reference, traj_b is the updated
-        if not (self.traj_encoder_cls == "cnn" or self.traj_encoder_cls == "visual-transformer"):
-            decoded_traj_a = self.traj_decoder(encoded_traj_a)
-            decoded_traj_b = self.traj_decoder(encoded_traj_b)
-        else:
-            decoded_traj_a, decoded_traj_b = None, None
+        # if not (self.traj_encoder_cls == "cnn" or self.traj_encoder_cls == "visual-transformer"):
+        #     decoded_traj_a = self.traj_decoder(encoded_traj_a)
+        #     decoded_traj_b = self.traj_decoder(encoded_traj_b)
+        # else:
+        decoded_traj_a, decoded_traj_b = None, None
 
         output = (
             encoded_traj_a,

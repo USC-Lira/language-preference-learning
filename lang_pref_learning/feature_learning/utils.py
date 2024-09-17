@@ -2,7 +2,7 @@ import os
 import datetime
 import logging
 
-LANG_MODEL_NAME = {
+HF_LANG_MODEL_NAME = {
     # BERT models
     'bert-base': 'google/bert_uncased_L-12_H-768_A-12',
     'bert-mini': 'google/bert_uncased_L-4_H-256_A-4',

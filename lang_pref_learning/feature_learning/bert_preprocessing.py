@@ -5,12 +5,12 @@ import torch
 import argparse
 import os
 
-from lang_pref_learning.feature_learning.utils import LANG_MODEL_NAME
+from lang_pref_learning.feature_learning.utils import HF_LANG_MODEL_NAME
 
 os.environ["OMP_NUM_THREADS"] = "4"
 
 
-def preprocess_strings(nlcomp_dir, lang_model, nlcomp_list=None, id_mapping=False, save=False):
+def preprocess_strings(nlcomp_dir, lang_model_name, nlcomp_list=None, id_mapping=False, save=False):
     if nlcomp_list is None:
         assert nlcomp_dir != ''
         # nlcomp_file is a json file with the list of comparisons in NL.
@@ -36,11 +36,10 @@ def preprocess_strings(nlcomp_dir, lang_model, nlcomp_list=None, id_mapping=Fals
             json.dump(unique_nlcomps, f)
         np.save(os.path.join(nlcomp_dir, 'nlcomp_indexes.npy'), np.asarray(nlcomp_indexes, dtype=np.int32))
 
+    # Get the embeddings for the unique nlcomps
     unbatched_input = unique_nlcomps
-
-    # Get BERT embeddings
-    tokenizer = AutoTokenizer.from_pretrained(LANG_MODEL_NAME[lang_model])
-    model = AutoModel.from_pretrained(LANG_MODEL_NAME[lang_model])
+    tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[lang_model_name])
+    model = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[lang_model_name])
     lang_embeddings = []
     for sentence in unbatched_input:
         inputs = tokenizer(sentence, return_tensors="pt")
@@ -52,7 +51,7 @@ def preprocess_strings(nlcomp_dir, lang_model, nlcomp_list=None, id_mapping=Fals
         lang_embeddings.append(embedding.detach().numpy())
 
     if id_mapping:
-        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(lang_model))
+        outfile = os.path.join(nlcomp_dir, 'unique_nlcomps_{}.npy'.format(lang_model_name))
     else:
         outfile = os.path.join(nlcomp_dir, 'nlcomps.npy')
 
@@ -68,8 +67,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--data-dir', type=str, default='', help='')
     parser.add_argument('--batch-size', type=int, default=5000, help='')
-    parser.add_argument('--id-mapping', action="store_true", help='')
+    parser.add_argument('--id-mapping', default=True, help='')
     parser.add_argument('--lang-model', default='bert-base', help='Which BERT model to use')
 
     args = parser.parse_args()
-    preprocess_strings(args.data_dir, args.lang_model, id_mapping=args.id_mapping, save=True)
+    preprocess_strings(args.data_dir, args.lang_model_name, id_mapping=args.id_mapping, save=True)
