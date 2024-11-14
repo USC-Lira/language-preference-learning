@@ -425,13 +425,6 @@ def run(args):
 
     # Compatibility with old models
     state_dict = torch.load(os.path.join(args.model_dir, "best_model_state_dict.pth"))
-    if args.old_model:
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            new_k = k.replace("_hidden_layer", ".0")
-            new_k = new_k.replace("_output_layer", ".2")
-            new_state_dict[new_k] = v
-        state_dict = new_state_dict
 
     model.load_state_dict(state_dict)
     model.eval()
@@ -447,7 +440,6 @@ def run(args):
         model,
         device,
         tokenizer,
-        nlcomps_bert_embeds=train_nlcomps_embed,
         use_img_obs=args.use_img_obs,
         img_obs=train_img_obs,
         actions=train_actions,
@@ -459,7 +451,6 @@ def run(args):
         model,
         device,
         tokenizer,
-        nlcomps_bert_embeds=test_nlcomps_embed,
         use_img_obs=args.use_img_obs,
         img_obs=test_img_obs,
         actions=test_actions,
@@ -554,12 +545,6 @@ def run(args):
     if args.use_other_feedback:
         postfix_noisy += "_other_feedback_" + str(args.num_other_feedback)
         postfix_noiseless += "_other_feedback_" + str(args.num_other_feedback)
-        if args.use_constant_temp:
-            postfix_noisy += f"_temp_{args.lang_temp}" + f"_lc_{args.lang_loss_coeff}"
-            postfix_noiseless += f"_temp_{args.lang_temp}" + f"_lc_{args.lang_loss_coeff}"
-        else:
-            postfix_noisy += "_temp_cos" + f"_lc_{args.lang_loss_coeff}"
-            postfix_noiseless += "_temp_cos" + f"_lc_{args.lang_loss_coeff}"
 
         if not args.use_lang_pref:
             postfix_noisy += "_no_lang_pref"

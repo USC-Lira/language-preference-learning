@@ -19,9 +19,6 @@ def load_data(args, split='train', DEBUG=False):
     traj_img_obs = None
     actions = None
 
-    if not args.use_lang_encoder:
-        nlcomp_embeds = np.load(f"{args.data_dir}/{split}/unique_nlcomps_{args.lang_model_name}.npy")
-
     if args.use_img_obs:
         traj_img_obs = np.load(f"{args.data_dir}/{split}/traj_img_obs.npy")
         actions = np.load(f"{args.data_dir}/{split}/actions.npy")
