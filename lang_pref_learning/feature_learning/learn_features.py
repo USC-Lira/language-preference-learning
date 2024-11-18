@@ -603,6 +603,6 @@ if __name__ == "__main__":
 
     ## stage 2: co-finetune BERT and the trajectory encoder
     logger.info("\n------------------ Co-finetune Language Model ------------------")
-    args.finetune_lang_model_name = True
+    args.finetune_lang_model = True
     args.lr = args.finetune_lr
     train(logger, args)
