@@ -7,7 +7,7 @@ import torch.optim as optim
 import numpy as np
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 from tqdm import tqdm
-import time
+import json
 
 
 from lang_pref_learning.feature_learning.nl_traj_dataset import NLTrajComparisonDataset
@@ -299,6 +299,10 @@ def train(logger, args):
 
     if not os.path.isdir(args.save_dir):
         os.makedirs(args.save_dir)
+    
+    # save the args
+    with open(os.path.join(args.save_dir, "args.json"), "w") as f:
+        json.dump(args.__dict__, f)
 
     train_files_dict = load_data(args, split="train")
     val_files_dict = load_data(args, split="val")
@@ -376,6 +380,7 @@ def train(logger, args):
         shuffle=False,
         num_workers=0,
         pin_memory=False,
+
     )
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
@@ -520,7 +525,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, default=0, help="")
     parser.add_argument("--data-dir", type=str, default="data/", help="")
-    parser.add_argument("--epochs", type=int, default=5, help="")
+    parser.add_argument("--epochs", type=int, default=2, help="")
     parser.add_argument("--batch-size", type=int, default=1024, help="")
     parser.add_argument("--lr", type=float, default=1e-3, help="")
     parser.add_argument("--finetune-lr", type=float, default=1e-4, help="")
