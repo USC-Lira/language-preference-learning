@@ -41,7 +41,7 @@ It will generate the index mapping from trajectory comparisons to language descr
 and BERT embeddings for the language descriptions.  -->
 
 ## Download Data
-Please download the preprocessed data from [here](https://drive.google.com/drive/folders/1655555555555555555555555555555555555555?usp=sharing) and put it in the `data` folder. If you want to collect your own data, please follow the instructions in [this](https://github.com/jeremy29tien/robosuite-benchmark) and [this](https://github.com/lemonlemonde/modded_metaworld) repo.
+Please download the preprocessed data from [here](https://1drv.ms/f/c/98df79c140395b75/EnVbOUDBed8ggJhuAAAAAAABmrKuKTPTpE1H1PAxhmglmA) and put it in the `data` folder. If you want to collect your own data, please follow the instructions in [this](https://github.com/jeremy29tien/robosuite-benchmark) and [this](https://github.com/lemonlemonde/modded_metaworld) repo.
 
 ## Feature Learning
 We adopt a two-stage training procedure. First, we freeze the language model(T5) and train the trajectory encoder. 
@@ -55,7 +55,7 @@ python -m feature_learning.learn_features --initial-loss-check \
 ## Reward Learning
 ```
 python -m lang_pref_learning.pref_learning.train_pref_learning --env=robosuite \
---data-dir=data/robosuite_pref_learning \
+--data-dir=data/robosuite_pref_learning_2 \
 --model-dir=MODEL_DIR \
 --true-reward-dir=lang_pref_learning/pref_learning/true_rewards_rs/0 \
 --method=lang \
