@@ -69,7 +69,6 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
     reward_values = (reward_values - np.min(reward_values)) / (np.max(reward_values) - np.min(reward_values))
 
     # get the 5 trajectories with the lowest reward values
-    import pdb; pdb.set_trace()
     init_traj_idxs = np.argsort(reward_values)[:5]
     curr_traj_idx = np.random.choice(init_traj_idxs)
     curr_traj_value = reward_values[curr_traj_idx]
