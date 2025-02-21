@@ -13,7 +13,7 @@ import os
 from transformers import AutoModel, AutoTokenizer, T5EncoderModel
 
 from lang_pref_learning.feature_learning.utils import HF_LANG_MODEL_NAME, LANG_OUTPUT_DIM
-from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed_cosine, get_nearest_embed_distance, get_nearest_embed_project
+from lang_pref_learning.model_analysis.find_nearest_traj import get_nearest_embed#, get_nearest_embed_project
 from lang_pref_learning.model.encoder import NLTrajAutoencoder
 from lang_pref_learning.real_robot_exp.utils import get_lang_embed, get_traj_embeds_wx
 from lang_pref_learning.real_robot_exp.utils import replay_traj_widowx, replay_trajectory_video, remove_special_characters
@@ -68,7 +68,10 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
     reward_values = np.dot(feature_values, dummy_reward_func)
     reward_values = (reward_values - np.min(reward_values)) / (np.max(reward_values) - np.min(reward_values))
 
-    curr_traj_idx = np.argmin(reward_values)
+    # get the 5 trajectories with the lowest reward values
+    import pdb; pdb.set_trace()
+    init_traj_idxs = np.argsort(reward_values)[:5]
+    curr_traj_idx = np.random.choice(init_traj_idxs)
     curr_traj_value = reward_values[curr_traj_idx]
     if args.debug:
         print(f'Initial trajectory: {curr_traj_idx}, initial value: {curr_traj_value}\n')
@@ -109,11 +112,11 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
         nlcomp = remove_special_characters(nlcomp)
         print(nlcomp)
 
-        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer, lang_model_name=lang_encoder)
+        lang_embed = get_lang_embed(nlcomp, model, device, tokenizer)
         # next_traj_idx = get_nearest_embed_cosine(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
-        next_traj_idx = get_nearest_embed_distance(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
+        next_traj_idx = get_nearest_embed(traj_embeds[curr_traj_idx], lang_embed, traj_embeds, curr_traj_idx)
         curr_traj_idx = next_traj_idx
-        # next_traj_value = reward_values[next_traj_idx]
+        next_traj_value = reward_values[next_traj_idx]
 
         # if next_traj_value > curr_traj_value:
         #     curr_traj_idx = next_traj_idx
@@ -123,7 +126,7 @@ def improve_trajectory_human(feature_values, traj_embeds, traj_images, traj_poli
 
         if args.debug:
             print(f'========= Iteration {i} =========')
-            print(f'Current trajectory: {curr_traj_idx}, current value: {curr_traj_value}')
+            print(f'Next trajectory: {next_traj_idx}, next value: {next_traj_value}')
             print(f'Language comparison: {nlcomp}\n')
             
     if args.real_robot:
@@ -180,7 +183,7 @@ def main(args):
         feature_dim = LANG_OUTPUT_DIM[args.lang_model_name]
     else:
         lang_encoder = AutoModel.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
-        tokenizer = AutoTokenizer.from_pretrained(LANG_OUTPUT_DIM[args.lang_model_name])
+        tokenizer = AutoTokenizer.from_pretrained(HF_LANG_MODEL_NAME[args.lang_model_name])
         feature_dim = 128
 
     if args.env == "widowx":
@@ -242,12 +245,12 @@ if __name__ == '__main__':
     parser.add_argument('--use-image-obs', action='store_true')
     parser.add_argument('--traj-encoder', type=str, default='cnn',
                         choices=['mlp', 'cnn'], help='which trajectory encoder to use')
-    parser.add_argument('--seed', type=int, default=42)
+    # parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num-trails', type=int, default=10)
     parser.add_argument('--real-robot', action='store_true')
     args = parser.parse_args()
 
-    # Set seed
-    np.random.seed(args.seed)
+    # randomly set a seed
+    np.random.seed(np.random.randint(0, 1000000))
 
     main(args)
