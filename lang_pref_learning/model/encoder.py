@@ -50,13 +50,6 @@ class NLTrajAutoencoder(nn.Module):
                     hidden_dim=encoder_hidden_dim,
                     output_dim=feature_dim,
                 )
-        elif traj_encoder == "lstm":
-            self.traj_encoder = LSTMEncoder(
-                state_dim=STATE_OBS_DIM,
-                action_dim=ACTION_DIM,
-                hidden_dim=encoder_hidden_dim,
-                output_dim=feature_dim,
-            )
         else:
             raise ValueError(f"Trajectory encoder {traj_encoder} not found")
 
